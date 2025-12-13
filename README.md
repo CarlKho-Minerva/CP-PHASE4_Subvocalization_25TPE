@@ -91,7 +91,7 @@ Channel 2 (Jaw/Intensity):
 
 ## 🗣️ Vocabulary Selection
 
-Choose words based on **tongue gymnastics**, not meaning.
+Choose words based on **tongue gymnastics**, not meaning. Say "To do" instead of "task"
 
 ### Tier 1: High Success Rate
 
