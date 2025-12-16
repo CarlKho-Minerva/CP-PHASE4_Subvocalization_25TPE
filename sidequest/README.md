@@ -1,68 +1,171 @@
-# 🔒 Typographic Watermarking
+# 🔒 Typographic Watermark
 
 **Invisible AI Text Attribution via Unicode Substitution**
 
-A Chrome extension that embeds invisible "fingerprints" into AI-generated text by replacing standard ASCII spaces with visually-identical Unicode variants.
+> "We shouldn't detect AI by analyzing words. We should detect it by analyzing spaces."
 
-## The Idea
+A Chrome extension that embeds invisible provenance metadata into AI-generated text by replacing ASCII spaces with model-specific Unicode variants.
 
-Every time you copy text from an AI chat (ChatGPT, Claude, Gemini, etc.), this extension automatically replaces the standard space character (U+0020) with a model-specific Unicode space that looks identical but can be detected programmatically.
+## ✨ Features
 
-| AI Model | Unicode Space | Character |
+- **Invisible fingerprints** — Looks identical, detectable programmatically
+- **Multi-source detection** — Identify text even from mixed AI sources
+- **Confidence metrics** — See exact watermarked vs regular space ratio
+- **Zero model access needed** — Works at the copy layer, not the model layer
+
+## 🎯 Supported AIs
+
+| AI Model | Unicode Space | Codepoint |
 |----------|---------------|-----------|
-| ChatGPT | U+2009 | Thin Space |
-| Claude | U+200A | Hair Space |
-| Gemini | U+2005 | Four-Per-Em Space |
-| Copilot | U+2006 | Six-Per-Em Space |
-| Perplexity | U+2007 | Figure Space |
-| Poe | U+2004 | Three-Per-Em Space |
+| ChatGPT | Thin Space | U+2009 |
+| Claude | Hair Space | U+200A |
+| Gemini | Four-Per-Em | U+2005 |
+| Copilot | Six-Per-Em | U+2006 |
+| Perplexity | Figure Space | U+2007 |
+| Poe | Three-Per-Em | U+2004 |
+| Pi | Punctuation | U+2008 |
+| HuggingChat | Medium Math | U+205F |
 
-## Installation
+## 📦 Installation
 
-1. Open Chrome and go to `chrome://extensions/`
-2. Enable **Developer mode** (top right toggle)
-3. Click **Load unpacked**
-4. Select the `chrome-extension` folder
+### Chrome Extension (Recommended)
+1. Clone this repo
+2. Go to `chrome://extensions/`
+3. Enable **Developer mode**
+4. Click **Load unpacked** → select `chrome-extension/`
 
-## Usage
+### Web Detector
+Visit [typographic-watermark.vercel.app](https://typographic-watermark.vercel.app) to paste and analyze text.
 
-1. Go to any supported AI chat (ChatGPT, Claude, Gemini, etc.)
-2. Copy any text (Cmd+C / Ctrl+C)
-3. The watermark is automatically injected!
-4. Open `decoder.html` to detect the source of any text
+## 🧪 How Detection Works
 
-## Demo
+```javascript
+// Each AI gets a unique "invisible" space:
+const FINGERPRINTS = {
+  'chatgpt.com': '\u2009',  // Thin Space
+  'claude.ai': '\u200A',    // Hair Space
+  'gemini.google.com': '\u2005', // Four-Per-Em
+};
 
-Open the browser console on any AI chat site to see:
+// When you copy, all regular spaces become fingerprinted:
+text.replace(/ /g, fingerprint);
 ```
-🔒 Typographic Watermark active on ChatGPT
+
+## 📊 Confidence Calculation
+
+```
+Watermark Confidence = (Watermarked Spaces / Total Spaces) × 100%
 ```
 
-When you copy text:
+**Interpretation:**
+- **100% watermarked** → Copied directly from AI with extension
+- **0% watermarked** → Original text or watermark stripped
+- **Mixed %** → Edited text (some parts AI, some human)
+- **Multiple sources** → Text combined from different AIs
+
+## 🔬 Robustness Testing
+
+| Platform | Survives? | Notes |
+|----------|-----------|-------|
+| Google Docs | ✅ 100% | Full preservation |
+| Microsoft Word | ✅ 100% | Full preservation |
+| Gmail / Outlook | ✅ 100% | Full preservation |
+| Twitter/X | ✅ 100% | Full preservation |
+| Notepad (Windows) | ❌ 0% | Converts to ASCII |
+| VS Code | ⚠️ ~50% | Depends on settings |
+| Plain text editors | ❌ | Usually normalize |
+
+## 🚀 Future Ideas
+
+### Multi-Source Analysis
+When text has multiple watermarks, we show all detected sources with their space counts. This reveals:
+- Copy-paste from multiple AI chats
+- Human editing with AI assistance
+- AI-to-AI chains
+
+### Crowdsourced Detection Database
+Optionally submit anonymous detection results to build a dataset:
+- What % of web content is AI-generated?
+- Which AIs are most commonly mixed?
+- Platform-specific survival rates
+
+(Privacy-first: only space ratios, never actual text)
+
+### Extended Metadata
+Future versions could encode:
+- Timestamp patterns (alternating space types)
+- Session IDs (space sequences as binary)
+- Model version (different space for GPT-4 vs GPT-4o)
+
+## ⚠️ Limitations
+
+This is **fragile by design**. It's a passive attribution layer, not DRM:
+- Trivially strippable with regex
+- Only works if OUR extension injected the watermark
+- Not proof of AI authorship, just copy history
+
+## 🎬 Loom Script (2 min)
+
 ```
-🔒 Typographic Watermark: Injected ChatGPT signature (U+2009)
+[0:00-0:10] HOOK
+"Everyone's trying to detect AI by analyzing words.
+I'm detecting it by analyzing... spaces."
+*dramatic pause*
+
+[0:10-0:30] THE REVEAL
+*Screen share showing Chrome extension*
+"I built a Chrome extension that makes AI text identifiable.
+Watch this."
+*Go to ChatGPT, generate text, hit copy*
+*Toast notification appears*
+
+[0:30-0:50] THE DECODER
+"Now I paste into my detector..."
+*Paste into web tool*
+*Bar fills up: 100% watermarked, ChatGPT detected*
+"Boom. It knows."
+
+[0:50-1:10] THE TRICK
+"Here's the trick: Unicode has MANY invisible spaces.
+This one's U+2009, used by ChatGPT.
+Claude uses U+200A. Gemini uses U+2005.
+They look identical. But computers can tell."
+
+[1:10-1:30] MULTI-SOURCE DEMO
+*Grab text from Claude, paste after ChatGPT text*
+*Analyze: Shows BOTH sources with space counts*
+"Mixed sources? We detect both."
+
+[1:30-1:50] THE IMPLICATIONS
+"This isn't about detecting all AI text.
+It's about adding an invisible barcode—metadata via typography.
+If this was built into ChatGPT itself..."
+
+[1:50-2:00] CTA
+"Extension's free, link in bio.
+Try fooling the detector. I dare you."
 ```
 
-## Limitations
+## 📝 arXiv Paper Structure
 
-- The watermark can be stripped by:
-  - Pasting into Notepad (Windows)
-  - Some IDEs that normalize whitespace
-  - Text sanitization scripts
-- However, it survives in:
-  - Google Docs
-  - Microsoft Word
-  - Most social media platforms
-  - Email clients
+See `decoder.html` for full academic framing with:
+- Abstract & Introduction
+- Related Work (Kirchenbauer watermarking, DetectGPT)
+- Methodology
+- Robustness analysis
+- Limitations
+- References
 
-## For the arXiv Paper
+## 🤝 Contributing
 
-This project demonstrates **post-hoc typographic watermarking** as an alternative to logit-level watermarking. Key research questions:
+Ideas welcome:
+- More AI platform fingerprints
+- Browser extension for Firefox/Safari
+- Native app clipboard monitoring
+- Academic validation studies
 
-1. **Robustness**: Which platforms preserve Unicode spaces?
-2. **Detectability**: Can users notice the substitution?
-3. **Scalability**: Can we encode more information (model version, timestamp)?
+## 📄 License
 
-## License
+MIT — Built by [Carl Kho](https://carlkho.com) at Sun Moon Lake, Taiwan 🇹🇼
 
-MIT
+December 16 2025

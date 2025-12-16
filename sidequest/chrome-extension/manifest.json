@@ -3,7 +3,7 @@
   "name": "Typographic Watermark",
   "version": "0.1.0",
   "description": "Invisible AI text attribution via Unicode substitution",
-  "permissions": ["clipboardWrite", "activeTab"],
+  "permissions": ["clipboardWrite", "clipboardRead", "activeTab"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",

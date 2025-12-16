@@ -1,140 +1,146 @@
 /**
- * Typographic Watermarking - Content Script
- * Intercepts copy events and injects Unicode fingerprints
+ * Typographic Watermarking - Content Script v3.1
+ * Hybrid approach: page injection + isolated world backup
  */
 
-// Unicode space fingerprints for each AI provider
 const FINGERPRINTS = {
-  // OpenAI
-  'chatgpt.com': '\u2009',      // Thin Space
-  'chat.openai.com': '\u2009',  // Thin Space
-
-  // Anthropic
-  'claude.ai': '\u200A',        // Hair Space
-
-  // Google
-  'gemini.google.com': '\u2005', // Four-Per-Em Space
-
-  // Others
-  'poe.com': '\u2004',          // Three-Per-Em Space
-  'copilot.microsoft.com': '\u2006', // Six-Per-Em Space
-  'perplexity.ai': '\u2007',    // Figure Space
+  'chatgpt.com': '\u2009',
+  'chat.openai.com': '\u2009',
+  'claude.ai': '\u200A',
+  'gemini.google.com': '\u2005',
+  'poe.com': '\u2004',
+  'copilot.microsoft.com': '\u2006',
+  'perplexity.ai': '\u2007',
   'www.perplexity.ai': '\u2007',
-  'pi.ai': '\u2008',            // Punctuation Space
-  'huggingface.co': '\u205F',   // Medium Mathematical Space
+  'pi.ai': '\u2008',
+  'huggingface.co': '\u205F',
 };
 
-// Get fingerprint for current site
 function getFingerprint() {
-  const hostname = window.location.hostname;
-  return FINGERPRINTS[hostname] || null;
+  return FINGERPRINTS[window.location.hostname] || null;
 }
 
-// Get AI name for logging
 function getAIName() {
-  const hostname = window.location.hostname;
-  if (hostname.includes('chatgpt') || hostname.includes('openai')) return 'ChatGPT';
-  if (hostname.includes('claude')) return 'Claude';
-  if (hostname.includes('gemini')) return 'Gemini';
-  if (hostname.includes('poe')) return 'Poe';
-  if (hostname.includes('copilot')) return 'Copilot';
-  if (hostname.includes('perplexity')) return 'Perplexity';
-  if (hostname.includes('pi.ai')) return 'Pi';
-  if (hostname.includes('huggingface')) return 'HuggingChat';
-  return 'Unknown AI';
+  const h = window.location.hostname;
+  if (h.includes('chatgpt') || h.includes('openai')) return 'ChatGPT';
+  if (h.includes('claude')) return 'Claude';
+  if (h.includes('gemini')) return 'Gemini';
+  if (h.includes('poe')) return 'Poe';
+  if (h.includes('copilot')) return 'Copilot';
+  if (h.includes('perplexity')) return 'Perplexity';
+  if (h.includes('pi.ai')) return 'Pi';
+  if (h.includes('huggingface')) return 'HuggingChat';
+  return 'AI';
 }
 
-// Inject watermark into text
 function injectWatermark(text) {
-  const fingerprint = getFingerprint();
-  if (!fingerprint) return text;
-
-  // Replace standard ASCII spaces with the fingerprint space
-  return text.replace(/ /g, fingerprint);
+  const fp = getFingerprint();
+  if (!fp || !text) return text;
+  return text.replace(/ /g, fp);
 }
 
-// Show visual notification
-function showNotification(aiName, charCode) {
-  // Remove existing notification if any
+function showNotification(msg) {
   const existing = document.getElementById('tw-notification');
   if (existing) existing.remove();
 
-  const notification = document.createElement('div');
-  notification.id = 'tw-notification';
-  notification.innerHTML = `🔒 Watermark injected: ${aiName} (U+${charCode})`;
-  notification.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: #000;
-    color: #fff;
-    padding: 12px 20px;
-    font-family: monospace;
-    font-size: 12px;
-    border-radius: 4px;
-    z-index: 999999;
+  const n = document.createElement('div');
+  n.id = 'tw-notification';
+  n.textContent = msg;
+  n.style.cssText = `
+    position: fixed; bottom: 20px; right: 20px;
+    background: #000; color: #fff;
+    padding: 12px 20px; font-family: monospace; font-size: 12px;
+    border-radius: 4px; z-index: 999999;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     animation: tw-fade 3s forwards;
   `;
 
-  // Add animation style
   if (!document.getElementById('tw-styles')) {
-    const style = document.createElement('style');
-    style.id = 'tw-styles';
-    style.textContent = `
-      @keyframes tw-fade {
-        0% { opacity: 0; transform: translateY(10px); }
-        10% { opacity: 1; transform: translateY(0); }
-        80% { opacity: 1; }
-        100% { opacity: 0; }
-      }
-    `;
-    document.head.appendChild(style);
+    const s = document.createElement('style');
+    s.id = 'tw-styles';
+    s.textContent = `@keyframes tw-fade { 0%{opacity:0;transform:translateY(10px)} 10%{opacity:1;transform:translateY(0)} 80%{opacity:1} 100%{opacity:0} }`;
+    document.head.appendChild(s);
   }
 
-  document.body.appendChild(notification);
-  setTimeout(() => notification.remove(), 3000);
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 3000);
 }
 
-// Listen for copy events on the document
+// Store original clipboard methods
+const originalWriteText = navigator.clipboard.writeText.bind(navigator.clipboard);
+const originalWrite = navigator.clipboard.write.bind(navigator.clipboard);
+
+// =========================================
+// METHOD 1: Override Clipboard.writeText (MAIN - catches button clicks)
+// =========================================
+navigator.clipboard.writeText = async function(text) {
+  const fp = getFingerprint();
+  if (fp && text) {
+    const watermarked = injectWatermark(text);
+    const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
+    console.log(`🔒 TW: writeText → ${getAIName()} (U+${code})`);
+    showNotification(`🔒 ${getAIName()} (U+${code})`);
+    return originalWriteText(watermarked);
+  }
+  return originalWriteText(text);
+};
+
+// =========================================
+// METHOD 2: Override Clipboard.write (catches ClipboardItem usage)
+// =========================================
+navigator.clipboard.write = async function(items) {
+  const fp = getFingerprint();
+  if (!fp) return originalWrite(items);
+
+  try {
+    const newItems = await Promise.all(items.map(async (item) => {
+      const blobs = {};
+      for (const type of item.types) {
+        const blob = await item.getType(type);
+        if (type === 'text/plain') {
+          const text = await blob.text();
+          const watermarked = injectWatermark(text);
+          blobs[type] = new Blob([watermarked], { type });
+          const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
+          console.log(`🔒 TW: write() → ${getAIName()} (U+${code})`);
+          showNotification(`🔒 ${getAIName()} (U+${code})`);
+        } else {
+          blobs[type] = blob;
+        }
+      }
+      return new ClipboardItem(blobs);
+    }));
+    return originalWrite(newItems);
+  } catch (e) {
+    return originalWrite(items);
+  }
+};
+
+// =========================================
+// METHOD 3: Copy event handler (for Ctrl+C)
+// =========================================
 document.addEventListener('copy', function(e) {
-  console.log('🔒 TW: Copy event detected');
+  const fp = getFingerprint();
+  if (!fp) return;
 
-  const fingerprint = getFingerprint();
-  if (!fingerprint) {
-    console.log('🔒 TW: No fingerprint for this site');
-    return;
-  }
+  const sel = window.getSelection();
+  if (!sel || !sel.toString().trim()) return;
 
-  // Get the selected text
-  const selection = window.getSelection();
-  if (!selection || selection.toString().trim() === '') {
-    console.log('🔒 TW: No text selected');
-    return;
-  }
+  const original = sel.toString();
+  const watermarked = injectWatermark(original);
+  const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
 
-  const originalText = selection.toString();
-  const watermarkedText = injectWatermark(originalText);
+  e.clipboardData.setData('text/plain', watermarked);
+  e.preventDefault();
 
-  // Override the clipboard data
-  e.clipboardData.setData('text/plain', watermarkedText);
-  e.preventDefault(); // Prevent the default copy
+  console.log(`🔒 TW: copy event → ${getAIName()} (U+${code})`);
+  showNotification(`🔒 ${getAIName()} (U+${code})`);
+}, true);
 
-  const charCode = fingerprint.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
-  console.log(`🔒 TW: Injected ${getAIName()} signature (U+${charCode})`);
-  console.log(`🔒 TW: Original spaces: ${(originalText.match(/ /g) || []).length}`);
-  console.log(`🔒 TW: Watermarked spaces: ${(watermarkedText.match(new RegExp(fingerprint, 'g')) || []).length}`);
-
-  // Show visual notification
-  showNotification(getAIName(), charCode);
-}, true); // Use capture phase
-
-// Log that we're active
-const aiName = getAIName();
-const fingerprint = getFingerprint();
-if (fingerprint) {
-  console.log(`🔒 Typographic Watermark ACTIVE on ${aiName}`);
-  console.log(`🔒 Fingerprint: U+${fingerprint.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
-} else {
-  console.log(`🔒 Typographic Watermark loaded but no fingerprint for ${window.location.hostname}`);
+// Log activation
+const fp = getFingerprint();
+if (fp) {
+  const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
+  console.log(`🔒 Typographic Watermark v3.1 on ${getAIName()} (U+${code})`);
+  console.log(`🔒 TIP: Use the copy BUTTON for reliable watermarking`);
 }
