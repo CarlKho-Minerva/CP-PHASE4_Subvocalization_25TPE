@@ -27,7 +27,15 @@ Level 3 (Mouthing) → Train
 Level 4 (Subvocalization) → Test
 ```
 
-This tests whether models trained on high-amplitude mouthing signals can generalize to low-amplitude silent speech.
+**Multi-class classification** of silent speech words from dual-channel sEMG signals.
+
+### Target Classes (4 classes)
+- **GHOST**
+- **LEFT**
+- **STOP**
+- **REST** (Null class)
+
+*(Note: "MAMA" is used only for hardware validation, not classification)*
 
 ## Data Split Strategy
 
@@ -35,74 +43,66 @@ This tests whether models trained on high-amplitude mouthing signals can general
 
 To ensure realistic generalization, we use **session-based splitting** rather than random sampling:
 
-```python
-from sklearn.model_selection import train_test_split, GroupShuffleSplit
+## Train/Test Split Methodology
 
-def session_based_split(X: np.ndarray,
-                        y: np.ndarray,
-                        session_ids: np.ndarray,
-                        test_size: float = 0.2) -> tuple:
-    """
-    Split data ensuring entire sessions are in train OR test.
+### Strategy: Transfer Learning across Motor Intensities
 
-    This prevents data leakage from temporal autocorrelation.
-    """
-    gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=1738)
-    train_idx, test_idx = next(gss.split(X, y, groups=session_ids))
+The core hypothesis is that models trained on **Mouthing (Open Articulation)** can generalize to **Silent Articulation (Closed Articulation)**.
 
-    return (X[train_idx], X[test_idx],
-            y[train_idx], y[test_idx])
-```
+> **Why this matters:** We assume the *temporal sequence* of muscle activation is consistent between Open and Closed states, even if the *amplitude* differs by an order of magnitude.
 
-### Secondary Split: Motor Intensity Level
+| Split | Percentage | Data Source | Rationale |
+|-------|------------|-------------|-----------|
+| **Train** | ~70% | **Level 3: Mouthing (Open Mouth)** | **Source Domain:** High-amplitude, exaggerated signals to learn temporal dynamics. |
+| **Validation** | ~10% | **Level 3: Mouthing (Open Mouth)** | Hyperparameter tuning on clean source data. |
+| **Test** | ~20% | **Level 4: Silent Articulation (Closed Mouth)** | **Target Domain:** Low-amplitude, constrained signals (Real-world scenario). |
 
-For **transfer learning evaluation**:
+### Implementation in Code
 
 ```python
-def intensity_level_split(X: np.ndarray,
-                          y: np.ndarray,
-                          intensity_labels: np.ndarray) -> tuple:
+# Conceptual splitting logic
+def create_transfer_splits(X, y, intensity_labels):
     """
-    Split by motor intensity level for transfer learning.
-
+    Splits data based on motor intensity level.
     Args:
-        intensity_labels: Array indicating motor level (3=mouthing, 4=subvocal)
-
-    Returns:
-        X_train (Level 3), X_test (Level 4), y_train, y_test
+        X, y: Features and labels
+        intensity_labels: Array indicating motor level (3=Mouthing, 4=Silent Articulation)
     """
-    train_mask = intensity_labels == 3  # Mouthing
-    test_mask = intensity_labels == 4   # Subvocalization
+    # Train heavily on Source Domain (Level 3 - Open)
+    train_mask = intensity_labels == 3
+    X_train = X[train_mask]
+    y_train = y[train_mask]
 
-    return (X[train_mask], X[test_mask],
-            y[train_mask], y[test_mask])
+    # Test strictly on Target Domain (Level 4 - Closed)
+    test_mask = intensity_labels == 4
+    X_test = X[test_mask]
+    y_test = y[test_mask]
+
+    return X_train, X_test, y_train, y_test
 ```
 
-## Cross-Validation Strategy
+## Evaluation Metrics
 
-### 5-Fold Stratified CV
+1. **Accuracy:** Overall correctness across all 4 classes.
+2. **F1-Score (Macro):** Balanced metric accounting for class imbalances (if any).
+3. **Confusion Matrix:** To visualize specific misclassifications (e.g., confusing "GHOST" with "STOP").
+4. **Inference Latency:** Must be <5ms per window for real-time viability on ESP32.
 
-For model selection and hyperparameter tuning:
+### Success Criteria
+- **Baseline:** >60% accuracy on Test set (Level 4).
+- **Target:** >80% accuracy on Test set (Level 4).
+- **Latency:** <5ms inference time.
 
-```python
-from sklearn.model_selection import StratifiedKFold
+## Analysis Pipeline Steps
 
-def get_cv_splits(X: np.ndarray,
-                  y: np.ndarray,
-                  n_splits: int = 5) -> StratifiedKFold:
-    """
-    Stratified K-Fold to maintain class proportions.
-    """
-    return StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=1738)
-```
-
-## Expected Data Distribution
-
-| Split | Purpose | Expected N | Classes |
-|-------|---------|------------|---------|
-| Train | Model fitting | ~70% | Level 3 (Mouthing) |
-| Validation | Hyperparameter tuning | ~10% | Level 3 subset |
-| Test | Final evaluation | ~20% | Level 4 (Subvocalization) |
+1. **Data Loading:** Load CSVs, segment into 1s windows.
+2. **Preprocessing:** Bandpass (calculated in hardware), Notch (60Hz), Standardization.
+3. **Feature Engineering:** Extract statistical features (RMS, MAV, ZC, WL) and raw sequences.
+4. **Model Training:**
+    - Baseline: Random Forest (proven Pareto-optimal in Phase 3).
+    - Deep Learning: MaxCRNN (for maximum precision).
+5. **Evaluation:** Compute metrics on the "Silent Articulation" test set.
+6. **Visualization:** Plot confusion matrices and feature distributions.
 
 ## Safety Considerations
 

@@ -134,7 +134,7 @@ def plot_pareto_frontier(results_df):
 | **MaxCRNN achieves highest accuracy** | ~83% with 99% precision on target class |
 | **Random Forest is Pareto-optimal for ESP32** | 74% accuracy, 0.01ms latency, <50KB |
 | **Data augmentation critical for deep learning** | 29% accuracy boost (49% → 78%) |
-| **Transfer learning partially succeeds** | ~10-15% drop from mouthing → subvocal |
+| **Transfer learning partially succeeds** | ~10-15% drop from Open (Level 3) → Closed (Level 4) |
 
 ### 2. Deployment Recommendation
 
@@ -153,7 +153,7 @@ For **high-accuracy applications** (with GPU), use MaxCRNN:
 |------------|------------|
 | Single-subject dataset | Collect from N≥10 subjects |
 | Controlled environment | Real-world noise characterization |
-| Binary class (mouthing vs subvocal) | Gradient of motor intensities |
+| Binary class (Level 3 vs 4) | Gradient of motor intensities |
 | Limited vocabulary | Expand to phoneme-level recognition |
 
 ## Temporal Smoothing (Post-Processing)

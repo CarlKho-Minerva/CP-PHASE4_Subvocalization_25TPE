@@ -50,5 +50,5 @@
 ## Datasets
 
 - **Phase 3 EMG Dataset:** Custom single-subject forearm EMG (1.54M data points)
-- **Phase 4 Dataset:** Dual-channel subvocalization EMG (in progress)
+- **Phase 4 Dataset:** Dual-channel Silent Articulation EMG (Level 3/4) (in progress)
 - **Awesome Public Datasets:** https://github.com/awesomedata/awesome-public-datasets

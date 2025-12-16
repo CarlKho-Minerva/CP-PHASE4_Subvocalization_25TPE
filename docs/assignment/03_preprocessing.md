@@ -159,7 +159,7 @@ From the Phase 3 sEMG study:
 - **NOISE** class spans wide variance (needs non-linear boundaries)
 - **Spectrograms** reveal frequency-specific textures
 
-For Phase 4 (subvocalization), we expect:
-- Lower overall signal amplitude (covert vs overt speech)
-- More subtle inter-word differences
-- Dual-channel providing complementary information
+For Phase 4 (**Silent Articulation**), we expect:
+- **Lower amplitudes:** Level 4 (Closed) signals are ~10x smaller than Level 3 (Open) signals.
+- **Higher noise floor:** Due to facial micro-expressions.
+- **Key feature:** The `ZC` (Zero Crossing) feature becomes critical for detecting onset.

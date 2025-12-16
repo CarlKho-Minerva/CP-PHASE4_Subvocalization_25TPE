@@ -2,7 +2,7 @@
 
 ## Overview
 
-This section discusses model selection for subvocalization classification, including a **novel technique not covered in class**: the **MaxCRNN** (Inception + Bi-LSTM + Attention) architecture.
+This section discusses model selection for **Silent Articulation classification**, including a **novel technique not covered in class**: the **MaxCRNN** (Inception + Bi-LSTM + Attention) architecture.
 
 ## Model Selection Rationale
 

@@ -93,10 +93,10 @@ def print_classification_report(y_true, y_pred, class_names):
 
 ### Transfer Learning Degradation
 
-For Phase 4 (subvocalization), we expect ~10-15% accuracy drop from Phase 3 (mouthing) due to:
-- Lower signal amplitude
-- More subtle inter-word differences
-- Distribution shift between training (Level 3) and test (Level 4)
+96: For Phase 4 (**Silent Articulation**), we expect ~10-15% accuracy drop from Phase 3 (**High-Intensity / Mouthing**) due to:
+97: - Lower signal amplitude (Level 4 involves minimal movement)
+98: - More subtle inter-word differences
+99: - Distribution shift between training (Level 3) and test (Level 4)
 
 ## Latency Measurement
 
