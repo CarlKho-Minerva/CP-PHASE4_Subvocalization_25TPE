@@ -85,8 +85,8 @@ document.addEventListener('copy', function(e) {
   e.clipboardData.setData('text/plain', watermarked);
   e.preventDefault();
 
-  console.log(`🔒 TW: Copy → ${getAIName()} (U+${code})`);
-  showNotification(`🔒 Watermark: ${getAIName()} (U+${code})`);
+  console.log(`TW: Copy → ${getAIName()} (U+${code})`);
+  showNotification(`Watermark: ${getAIName()} (U+${code})`);
 }, true);
 
 // METHOD 2: Override Clipboard.writeText
@@ -95,8 +95,8 @@ navigator.clipboard.writeText = async function(text) {
   if (fp && text) {
     const watermarked = injectWatermark(text);
     const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
-    console.log(`🔒 TW: writeText → ${getAIName()} (U+${code})`);
-    showNotification(`🔒 Watermark: ${getAIName()} (U+${code})`);
+    console.log(`TW: writeText → ${getAIName()} (U+${code})`);
+    showNotification(`Watermark: ${getAIName()} (U+${code})`);
     return originalWriteText(watermarked);
   }
   return originalWriteText(text);
@@ -117,8 +117,8 @@ navigator.clipboard.write = async function(items) {
           const watermarked = injectWatermark(text);
           blobs[type] = new Blob([watermarked], { type });
           const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
-          console.log(`🔒 TW: write() → ${getAIName()} (U+${code})`);
-          showNotification(`🔒 Watermark: ${getAIName()} (U+${code})`);
+          console.log(`TW: write() → ${getAIName()} (U+${code})`);
+          showNotification(`Watermark: ${getAIName()} (U+${code})`);
         } else {
           blobs[type] = blob;
         }
@@ -135,5 +135,5 @@ navigator.clipboard.write = async function(items) {
 const fp = getFingerprint();
 if (fp) {
   const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
-  console.log(`🔒 Typographic Watermark v3 ACTIVE on ${getAIName()} (U+${code})`);
+  console.log(`Typographic Watermark v3 ACTIVE on ${getAIName()} (U+${code})`);
 }

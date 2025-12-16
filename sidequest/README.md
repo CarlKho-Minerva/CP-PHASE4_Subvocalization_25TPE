@@ -1,4 +1,4 @@
-# 🔒 Typographic Watermark
+# Typographic Watermark
 
 **Invisible AI Text Attribution via Unicode Substitution**
 
@@ -6,14 +6,14 @@
 
 A Chrome extension that embeds invisible provenance metadata into AI-generated text by replacing ASCII spaces with model-specific Unicode variants.
 
-## ✨ Features
+## Features
 
 - **Invisible fingerprints** — Looks identical, detectable programmatically
 - **Multi-source detection** — Identify text even from mixed AI sources
 - **Confidence metrics** — See exact watermarked vs regular space ratio
 - **Zero model access needed** — Works at the copy layer, not the model layer
 
-## 🎯 Supported AIs
+## Supported AIs
 
 | AI Model | Unicode Space | Codepoint |
 |----------|---------------|-----------|
@@ -26,7 +26,7 @@ A Chrome extension that embeds invisible provenance metadata into AI-generated t
 | Pi | Punctuation | U+2008 |
 | HuggingChat | Medium Math | U+205F |
 
-## 📦 Installation
+## Installation
 
 ### Chrome Extension (Recommended)
 1. Clone this repo
@@ -37,7 +37,7 @@ A Chrome extension that embeds invisible provenance metadata into AI-generated t
 ### Web Detector
 Visit [typographic-watermark.vercel.app](https://typographic-watermark.vercel.app) to paste and analyze text.
 
-## 🧪 How Detection Works
+## How Detection Works
 
 ```javascript
 // Each AI gets a unique "invisible" space:
@@ -51,7 +51,7 @@ const FINGERPRINTS = {
 text.replace(/ /g, fingerprint);
 ```
 
-## 📊 Confidence Calculation
+## Confidence Calculation
 
 ```
 Watermark Confidence = (Watermarked Spaces / Total Spaces) × 100%
@@ -63,7 +63,7 @@ Watermark Confidence = (Watermarked Spaces / Total Spaces) × 100%
 - **Mixed %** → Edited text (some parts AI, some human)
 - **Multiple sources** → Text combined from different AIs
 
-## 🔬 Robustness Testing
+## Robustness Testing
 
 | Platform | Survives? | Notes |
 |----------|-----------|-------|
@@ -75,7 +75,7 @@ Watermark Confidence = (Watermarked Spaces / Total Spaces) × 100%
 | VS Code | ⚠️ ~50% | Depends on settings |
 | Plain text editors | ❌ | Usually normalize |
 
-## 🚀 Future Ideas
+## Future Ideas
 
 ### Multi-Source Analysis
 When text has multiple watermarks, we show all detected sources with their space counts. This reveals:
@@ -97,14 +97,14 @@ Future versions could encode:
 - Session IDs (space sequences as binary)
 - Model version (different space for GPT-4 vs GPT-4o)
 
-## ⚠️ Limitations
+## Limitations
 
 This is **fragile by design**. It's a passive attribution layer, not DRM:
 - Trivially strippable with regex
 - Only works if OUR extension injected the watermark
 - Not proof of AI authorship, just copy history
 
-## 🎬 Loom Script (2 min)
+## Loom Script (2 min)
 
 ```
 [0:00-0:10] HOOK
@@ -146,7 +146,7 @@ If this was built into ChatGPT itself..."
 Try fooling the detector. I dare you."
 ```
 
-## 📝 arXiv Paper Structure
+## arXiv Paper Structure
 
 See `decoder.html` for full academic framing with:
 - Abstract & Introduction
@@ -156,7 +156,7 @@ See `decoder.html` for full academic framing with:
 - Limitations
 - References
 
-## 🤝 Contributing
+## Contributing
 
 Ideas welcome:
 - More AI platform fingerprints
@@ -164,8 +164,8 @@ Ideas welcome:
 - Native app clipboard monitoring
 - Academic validation studies
 
-## 📄 License
+## License
 
-MIT — Built by [Carl Kho](https://carlkho.com) at Sun Moon Lake, Taiwan 🇹🇼
+MIT — Built by [Carl Kho](https://carlkho.com) at Sun Moon Lake, Taiwan
 
 December 16 2025
