@@ -1,0 +1,2 @@
+# PHASE 4: Subvocalization - Serial Data Capture
+pyserial>=3.5
