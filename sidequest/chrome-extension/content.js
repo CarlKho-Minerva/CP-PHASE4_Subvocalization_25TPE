@@ -1,6 +1,6 @@
 /**
- * Typographic Watermarking - Content Script v3.1
- * Hybrid approach: page injection + isolated world backup
+ * Typographic Watermarking - Content Script v3 (STABLE)
+ * Multiple copy interception methods
  */
 
 const FINGERPRINTS = {
@@ -70,24 +70,39 @@ function showNotification(msg) {
 const originalWriteText = navigator.clipboard.writeText.bind(navigator.clipboard);
 const originalWrite = navigator.clipboard.write.bind(navigator.clipboard);
 
-// =========================================
-// METHOD 1: Override Clipboard.writeText (MAIN - catches button clicks)
-// =========================================
+// METHOD 1: Copy event
+document.addEventListener('copy', function(e) {
+  const fp = getFingerprint();
+  if (!fp) return;
+
+  const sel = window.getSelection();
+  if (!sel || !sel.toString().trim()) return;
+
+  const original = sel.toString();
+  const watermarked = injectWatermark(original);
+  const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
+
+  e.clipboardData.setData('text/plain', watermarked);
+  e.preventDefault();
+
+  console.log(`🔒 TW: Copy → ${getAIName()} (U+${code})`);
+  showNotification(`🔒 Watermark: ${getAIName()} (U+${code})`);
+}, true);
+
+// METHOD 2: Override Clipboard.writeText
 navigator.clipboard.writeText = async function(text) {
   const fp = getFingerprint();
   if (fp && text) {
     const watermarked = injectWatermark(text);
     const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
     console.log(`🔒 TW: writeText → ${getAIName()} (U+${code})`);
-    showNotification(`🔒 ${getAIName()} (U+${code})`);
+    showNotification(`🔒 Watermark: ${getAIName()} (U+${code})`);
     return originalWriteText(watermarked);
   }
   return originalWriteText(text);
 };
 
-// =========================================
-// METHOD 2: Override Clipboard.write (catches ClipboardItem usage)
-// =========================================
+// METHOD 3: Override Clipboard.write
 navigator.clipboard.write = async function(items) {
   const fp = getFingerprint();
   if (!fp) return originalWrite(items);
@@ -103,7 +118,7 @@ navigator.clipboard.write = async function(items) {
           blobs[type] = new Blob([watermarked], { type });
           const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
           console.log(`🔒 TW: write() → ${getAIName()} (U+${code})`);
-          showNotification(`🔒 ${getAIName()} (U+${code})`);
+          showNotification(`🔒 Watermark: ${getAIName()} (U+${code})`);
         } else {
           blobs[type] = blob;
         }
@@ -111,36 +126,14 @@ navigator.clipboard.write = async function(items) {
       return new ClipboardItem(blobs);
     }));
     return originalWrite(newItems);
-  } catch (e) {
+  } catch (err) {
     return originalWrite(items);
   }
 };
-
-// =========================================
-// METHOD 3: Copy event handler (for Ctrl+C)
-// =========================================
-document.addEventListener('copy', function(e) {
-  const fp = getFingerprint();
-  if (!fp) return;
-
-  const sel = window.getSelection();
-  if (!sel || !sel.toString().trim()) return;
-
-  const original = sel.toString();
-  const watermarked = injectWatermark(original);
-  const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
-
-  e.clipboardData.setData('text/plain', watermarked);
-  e.preventDefault();
-
-  console.log(`🔒 TW: copy event → ${getAIName()} (U+${code})`);
-  showNotification(`🔒 ${getAIName()} (U+${code})`);
-}, true);
 
 // Log activation
 const fp = getFingerprint();
 if (fp) {
   const code = fp.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
-  console.log(`🔒 Typographic Watermark v3.1 on ${getAIName()} (U+${code})`);
-  console.log(`🔒 TIP: Use the copy BUTTON for reliable watermarking`);
+  console.log(`🔒 Typographic Watermark v3 ACTIVE on ${getAIName()} (U+${code})`);
 }
