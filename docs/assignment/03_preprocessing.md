@@ -74,10 +74,10 @@ def normalize_signal(signal: np.ndarray) -> np.ndarray:
 
 | Feature | Formula | EMG Significance |
 |---------|---------|------------------|
-| **MAV** | $\frac{1}{N}\sum|x_i|$ | Overall muscle activation |
-| **ZCR** | $\sum \mathbb{I}(x_i \cdot x_{i-1} < 0)$ | Frequency proxy |
-| **SD** | $\sqrt{\frac{1}{N}\sum(x_i - \bar{x})^2}$ | Signal energy |
-| **MAX** | $\max(|x|)$ | Peak amplitude |
+| **MAV** | MAV = (1/N)Σ\|xᵢ\| | Overall muscle activation |
+| **ZCR** | ZCR = Σ𝕀(xᵢ·xᵢ₋₁ < 0) | Frequency proxy |
+| **SD** | SD = √[(1/N)Σ(xᵢ - x̄)²] | Signal energy |
+| **MAX** | MAX = max(\|x\|) | Peak amplitude |
 
 ```python
 def extract_statistical_features(window: np.ndarray) -> np.ndarray:
