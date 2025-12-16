@@ -53,14 +53,65 @@ function injectWatermark(text) {
   return text.replace(/ /g, fingerprint);
 }
 
-// Listen for copy events
-document.addEventListener('copy', (e) => {
+// Show visual notification
+function showNotification(aiName, charCode) {
+  // Remove existing notification if any
+  const existing = document.getElementById('tw-notification');
+  if (existing) existing.remove();
+
+  const notification = document.createElement('div');
+  notification.id = 'tw-notification';
+  notification.innerHTML = `🔒 Watermark injected: ${aiName} (U+${charCode})`;
+  notification.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #000;
+    color: #fff;
+    padding: 12px 20px;
+    font-family: monospace;
+    font-size: 12px;
+    border-radius: 4px;
+    z-index: 999999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    animation: tw-fade 3s forwards;
+  `;
+
+  // Add animation style
+  if (!document.getElementById('tw-styles')) {
+    const style = document.createElement('style');
+    style.id = 'tw-styles';
+    style.textContent = `
+      @keyframes tw-fade {
+        0% { opacity: 0; transform: translateY(10px); }
+        10% { opacity: 1; transform: translateY(0); }
+        80% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.body.appendChild(notification);
+  setTimeout(() => notification.remove(), 3000);
+}
+
+// Listen for copy events on the document
+document.addEventListener('copy', function(e) {
+  console.log('🔒 TW: Copy event detected');
+
   const fingerprint = getFingerprint();
-  if (!fingerprint) return; // Not on a supported AI site
+  if (!fingerprint) {
+    console.log('🔒 TW: No fingerprint for this site');
+    return;
+  }
 
   // Get the selected text
   const selection = window.getSelection();
-  if (!selection || selection.toString().trim() === '') return;
+  if (!selection || selection.toString().trim() === '') {
+    console.log('🔒 TW: No text selected');
+    return;
+  }
 
   const originalText = selection.toString();
   const watermarkedText = injectWatermark(originalText);
@@ -69,8 +120,21 @@ document.addEventListener('copy', (e) => {
   e.clipboardData.setData('text/plain', watermarkedText);
   e.preventDefault(); // Prevent the default copy
 
-  console.log(`🔒 Typographic Watermark: Injected ${getAIName()} signature (U+${fingerprint.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')})`);
-});
+  const charCode = fingerprint.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
+  console.log(`🔒 TW: Injected ${getAIName()} signature (U+${charCode})`);
+  console.log(`🔒 TW: Original spaces: ${(originalText.match(/ /g) || []).length}`);
+  console.log(`🔒 TW: Watermarked spaces: ${(watermarkedText.match(new RegExp(fingerprint, 'g')) || []).length}`);
+
+  // Show visual notification
+  showNotification(getAIName(), charCode);
+}, true); // Use capture phase
 
 // Log that we're active
-console.log(`🔒 Typographic Watermark active on ${getAIName()}`);
+const aiName = getAIName();
+const fingerprint = getFingerprint();
+if (fingerprint) {
+  console.log(`🔒 Typographic Watermark ACTIVE on ${aiName}`);
+  console.log(`🔒 Fingerprint: U+${fingerprint.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
+} else {
+  console.log(`🔒 Typographic Watermark loaded but no fingerprint for ${window.location.hostname}`);
+}
