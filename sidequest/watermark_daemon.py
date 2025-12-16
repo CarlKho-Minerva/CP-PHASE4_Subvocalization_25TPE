@@ -91,18 +91,42 @@ def main():
     print("Copy text from ChatGPT, Claude, or Gemini to inject watermark.")
     print("Press Ctrl+C to stop.\n")
 
-    last_paste = ""
+    # Test clipboard access first
+    try:
+        test = pyperclip.paste()
+        print(f"✓ Clipboard access OK (current length: {len(test)} chars)")
+    except Exception as e:
+        print(f"✗ Clipboard error: {e}")
+        return
+
+    # Test window detection
+    window = get_active_window_title()
+    print(f"✓ Window detection OK (current: '{window}')")
+    print()
+    print("Monitoring... (you'll see output when clipboard changes)")
+    print("-" * 50)
+
+    last_paste = pyperclip.paste()  # Initialize with current clipboard
+    poll_count = 0
 
     while True:
         try:
             # Check current clipboard
             current_paste = pyperclip.paste()
+            poll_count += 1
+
+            # Show we're alive every 20 polls (10 seconds)
+            if poll_count % 20 == 0:
+                print(f"[polling... {poll_count}]", end="\r")
 
             # If clipboard changed (User pressed Cmd+C)
-            if current_paste != last_paste and current_paste:
+            if current_paste != last_paste:
+                print(f"\n📋 Clipboard changed! Length: {len(current_paste)} chars")
+                print(f"   Preview: {current_paste[:50]}..." if len(current_paste) > 50 else f"   Content: {current_paste}")
 
                 # 1. Get the source (Window Title)
                 window_title = get_active_window_title()
+                print(f"   Window: '{window_title}'")
 
                 # 2. Modify the text
                 new_text = inject_watermark(current_paste, window_title)
@@ -111,8 +135,10 @@ def main():
                 if new_text != current_paste:
                     pyperclip.copy(new_text)
                     last_paste = new_text  # Update tracker so we don't loop forever
+                    print(f"   ✓ Clipboard updated with watermark\n")
                 else:
                     last_paste = current_paste
+                    print()
 
             time.sleep(0.5)  # Check twice a second
 
