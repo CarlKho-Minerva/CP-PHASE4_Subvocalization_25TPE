@@ -2,48 +2,49 @@
 
 ## Overview
 
-This section describes the classification task and train/test split methodology for the subvocalization pipeline.
+This section describes the classification task and train/test split methodology for the single-channel subvocalization pipeline.
 
 ## Classification Task
 
 ### Problem Definition
 
-**Multi-class classification** of subvocalized words from dual-channel sEMG signals.
+**Multi-class classification** of subvocalized words from single-channel sEMG signals.
 
 | Aspect | Description |
 |--------|-------------|
 | **Task Type** | Multi-class Classification |
-| **Input** | Dual-channel sEMG window (1000×2) |
-| **Output** | Word class (GHOST, LEFT, STOP, REST, etc.) |
+| **Input** | Single-channel sEMG window (3000×1) |
+| **Output** | Word class (GHOST, LEFT, STOP, REST) |
 | **Metric** | Accuracy, Precision, F1-Score |
+
+> **[INSERT IMAGE]** `images/viz_classification_task.png`
+> *Caption: Input/output diagram showing 3-second sEMG window mapped to word class prediction.*
 
 ### Transfer Learning Strategy
 
 The key insight of Phase 4 is **transfer learning from overt to covert speech**:
 
 ```
-Level 3 (Mouthing) → Train
-        ↓
-Level 4 (Subvocalization) → Test
+Level 3 (Mouthing)         → Train (High SNR, exaggerated movements)
+         ↓
+Level 4 (Silent Articulation) → Test (Low SNR, constrained movements)
 ```
 
-**Multi-class classification** of silent speech words from dual-channel sEMG signals.
+> **[INSERT IMAGE]** `images/viz_transfer_learning.png`
+> *Caption: Transfer learning paradigm showing high-amplitude source domain (L3) and low-amplitude target domain (L4).*
 
-### Target Classes (4 classes)
-- **GHOST**
-- **LEFT**
-- **STOP**
-- **REST** (Null class)
+### Target Classes (4 Classes)
 
-*(Note: "MAMA" is used only for hardware validation, not classification)*
+| Class | Word | Tongue Physics |
+|-------|------|----------------|
+| 0 | **GHOST** | Back of tongue → soft palate (velar stop) |
+| 1 | **LEFT** | Tongue tip → alveolar ridge (lateral approximant) |
+| 2 | **REST** | Tongue flat, relaxed (null class) |
+| 3 | **STOP** | Plosive onset, jaw engagement |
+
+> **Note:** "MAMA" is used only for hardware validation (lip movement = no tongue signal), not classification.
 
 ## Data Split Strategy
-
-### Primary Split: Session-Based
-
-To ensure realistic generalization, we use **session-based splitting** rather than random sampling:
-
-## Train/Test Split Methodology
 
 ### Strategy: Transfer Learning across Motor Intensities
 
@@ -51,65 +52,123 @@ The core hypothesis is that models trained on **Mouthing (Open Articulation)** c
 
 > **Why this matters:** We assume the *temporal sequence* of muscle activation is consistent between Open and Closed states, even if the *amplitude* differs by an order of magnitude.
 
-| Split | Percentage | Data Source | Rationale |
-|-------|------------|-------------|-----------|
-| **Train** | ~70% | **Level 3: Mouthing (Open Mouth)** | **Source Domain:** High-amplitude, exaggerated signals to learn temporal dynamics. |
-| **Validation** | ~10% | **Level 3: Mouthing (Open Mouth)** | Hyperparameter tuning on clean source data. |
-| **Test** | ~20% | **Level 4: Silent Articulation (Closed Mouth)** | **Target Domain:** Low-amplitude, constrained signals (Real-world scenario). |
+| Split | Source | Data | Rationale |
+|-------|--------|------|-----------|
+| **Train** | Level 3: Mouthing | ~50 cycles × 4 words | High-amplitude, exaggerated signals to learn temporal dynamics |
+| **Validation** | Level 3: Mouthing (held out) | ~10% of L3 | Hyperparameter tuning on source domain |
+| **Test** | Level 4: Silent Articulation | ~50 cycles × 4 words | Low-amplitude, constrained signals (real-world scenario) |
+
+> **[INSERT IMAGE]** `images/viz_data_split.png`
+> *Caption: Visualization of train/validation/test split across motor intensity levels.*
+
+### Single-Channel Considerations
+
+Without dual-channel spatial features, the model relies on:
+
+| Feature Type | Importance | Notes |
+|--------------|------------|-------|
+| **Temporal patterns** | ⭐⭐⭐⭐⭐ | Primary discriminator (onset timing, duration) |
+| **Frequency features** | ⭐⭐⭐⭐ | ZCR critical (stable across amplitude changes) |
+| **Amplitude features** | ⭐⭐ | Less reliable for transfer (L3→L4 amplitude drop) |
 
 ### Implementation in Code
 
 ```python
-# Conceptual splitting logic
-def create_transfer_splits(X, y, intensity_labels):
+def create_transfer_splits(data: dict) -> tuple:
     """
-    Splits data based on motor intensity level.
+    Create train/test split for transfer learning.
+
     Args:
-        X, y: Features and labels
-        intensity_labels: Array indicating motor level (3=Mouthing, 4=Silent Articulation)
+        data: Dictionary with 'mouthing' and 'subvocal' DataFrames
+
+    Returns:
+        X_train, y_train, X_test, y_test
     """
-    # Train heavily on Source Domain (Level 3 - Open)
-    train_mask = intensity_labels == 3
-    X_train = X[train_mask]
-    y_train = y[train_mask]
+    from sklearn.model_selection import train_test_split
 
-    # Test strictly on Target Domain (Level 4 - Closed)
-    test_mask = intensity_labels == 4
-    X_test = X[test_mask]
-    y_test = y[test_mask]
+    # Source Domain: Level 3 (Mouthing)
+    X_source, y_source = create_windows(data['mouthing'])
 
-    return X_train, X_test, y_train, y_test
+    # Target Domain: Level 4 (Silent Articulation)
+    X_target, y_target = create_windows(data['subvocal'])
+
+    # Train/Val split on source domain only
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_source, y_source, test_size=0.15, random_state=42, stratify=y_source
+    )
+
+    # Test set is entirely target domain
+    X_test, y_test = X_target, y_target
+
+    return X_train, X_val, X_test, y_train, y_val, y_test
 ```
 
 ## Evaluation Metrics
 
-1. **Accuracy:** Overall correctness across all 4 classes.
-2. **F1-Score (Macro):** Balanced metric accounting for class imbalances (if any).
-3. **Confusion Matrix:** To visualize specific misclassifications (e.g., confusing "GHOST" with "STOP").
-4. **Inference Latency:** Must be <5ms per window for real-time viability on ESP32.
+| Metric | Description | Priority |
+|--------|-------------|----------|
+| **Accuracy** | Overall correctness across all 4 classes | Primary |
+| **F1-Score (Macro)** | Balanced metric for class imbalance | Secondary |
+| **Confusion Matrix** | Visualize specific misclassifications | Diagnostic |
+| **Inference Latency** | Must be <5ms per window for real-time ESP32 | Deployment |
+
+> **[INSERT IMAGE]** `images/viz_confusion_matrix_template.png`
+> *Caption: Expected confusion matrix structure showing per-class precision and recall.*
 
 ### Success Criteria
-- **Baseline:** >60% accuracy on Test set (Level 4).
-- **Target:** >80% accuracy on Test set (Level 4).
-- **Latency:** <5ms inference time.
+
+| Level | Accuracy (L4 Test) | Interpretation |
+|-------|-------------------|----------------|
+| **Baseline** | >50% | Better than random (4 classes = 25%) |
+| **Acceptable** | >65% | Useful for assistive applications |
+| **Target** | >80% | Comparable to Phase 3 forearm results |
+
+### Comparison to Phase 3 Baseline
+
+| Metric | Phase 3 (Forearm) | Phase 4 Target |
+|--------|-------------------|----------------|
+| Classes | 3 (RELAX, CLENCH, NOISE) | 4 (GHOST, LEFT, STOP, REST) |
+| Channels | 1 | 1 |
+| Best Model | Random Forest (74%) | TBD |
+| Precision | MaxCRNN (99% on critical class) | TBD |
 
 ## Analysis Pipeline Steps
 
-1. **Data Loading:** Load CSVs, segment into 1s windows.
-2. **Preprocessing:** Bandpass (calculated in hardware), Notch (60Hz), Standardization.
-3. **Feature Engineering:** Extract statistical features (RMS, MAV, ZC, WL) and raw sequences.
-4. **Model Training:**
-    - Baseline: Random Forest (proven Pareto-optimal in Phase 3).
-    - Deep Learning: MaxCRNN (for maximum precision).
-5. **Evaluation:** Compute metrics on the "Silent Articulation" test set.
-6. **Visualization:** Plot confusion matrices and feature distributions.
+```
+1. Data Loading    → Load 5 CSV files (L1-L5)
+2. Preprocessing   → Bandpass, Notch 60Hz, Normalize
+3. Windowing       → 3-second windows per word
+4. Feature Extract → Statistical (MAV, ZCR, SD, MAX) + Temporal
+5. Train/Val/Test  → L3→Train/Val, L4→Test
+6. Model Training  → Random Forest baseline, then MaxCRNN
+7. Evaluation      → Confusion matrix, F1-score on L4
+8. Visualization   → Feature distributions, t-SNE embeddings
+```
+
+> **[INSERT IMAGE]** `images/viz_analysis_pipeline.png`
+> *Caption: Complete analysis pipeline from raw data to model evaluation.*
 
 ## Safety Considerations
 
 Following Phase 3's findings, we prioritize:
 
-1. **Precision** over Recall for the active class (avoid false positives)
-2. **Latency** < 100ms for real-time control
-3. **Memory** < 320KB for ESP32 deployment
+| Constraint | Value | Rationale |
+|------------|-------|-----------|
+| **Precision** | >90% on active classes | Avoid false positives in control applications |
+| **Latency** | <100ms end-to-end | Real-time feedback requirement |
+| **Memory** | <320KB model size | ESP32 SRAM constraint |
 
 The test set evaluation will focus on these deployment constraints.
+
+## Exploratory Analysis: Multi-Level Validation
+
+Beyond the primary L3→L4 transfer, we collect L1, L2, L5 data for exploratory analysis:
+
+| Level | Purpose |
+|-------|---------|
+| L1 (Overt) | Calibration baseline; verify signal quality |
+| L2 (Whisper) | Intermediate amplitude; validate fade curve |
+| L5 (Imagined) | Future work; pure mental representation |
+
+> **[INSERT IMAGE]** `images/viz_amplitude_fade.png`
+> *Caption: Expected amplitude progression from L1 (Overt) to L5 (Imagined), with ZCR remaining stable.*

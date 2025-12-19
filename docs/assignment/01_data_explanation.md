@@ -2,16 +2,15 @@
 
 ## Dataset Overview
 
-This project uses **single-channel surface EMG (sEMG) signals** captured from submental muscles during silent speech tasks. The data represents an extension of the Phase 3 single-lead forearm EMG dataset to silent speech recognition—an attempt to replicate MIT Media Lab's **AlterEgo** system for **$30** instead of **$1,200+**.
+This project uses **single-channel surface EMG (sEMG) signals** captured from submental muscles during silent speech tasks. The data represents an extension of the Phase 3 single-lead forearm EMG dataset to silent speech recognition—an attempt to replicate MIT Media Lab's **AlterEgo** system (Kapur et al., 2018) for **$30** instead of **$1,200+**.
 
-> [!NOTE]
-> **Design Change:** Originally planned as a dual-channel system (chin + jaw), this project was adapted to single-channel due to hardware limitations discovered during testing. See **[Hardware Adaptation](#hardware-adaptation-dual-to-single-channel)** below.
+> **Note on Hardware Adaptation:** This project was originally designed as a dual-channel system (chin + jaw). Due to hardware limitations discovered during testing—one AD8232 exhibited ADC saturation near the 12-bit ceiling—the system was adapted to single-channel operation. Full troubleshooting documentation is available in the [working_process/](../working_process/) directory.
 
 ## Data Source
 
 ### Personal Digital Archive Origin
 - **Creator:** Carl Vincent Ladres Kho (Minerva University)
-- **Collection Period:** December 2024
+- **Collection Period:** December 2025
 - **Location:** Taipei, Taiwan (components from Guang Hua Digital Plaza)
 - **Context:** Final assignment for CS156 Machine Learning Pipeline
 
@@ -25,11 +24,13 @@ Components were purchased from **Jin Hua Electronics (今華電子)** in Guang H
 
 | Component | Source | Cost (TWD) | Purpose |
 |-----------|--------|------------|---------|
-| **AD8232 x2** | Jin Hua Electronics | ~$300 each | Originally for dual-channel (see adaptation below) |
+| **AD8232 x2** | Jin Hua Electronics | ~$300 each | Originally dual-channel; one unit exhibited saturation |
 | **ESP32 (NodeMCU-32S)** | Jin Hua | ~$180 | MCU @ 1000Hz sampling, 3.3V logic |
-| **Ag/AgCl Electrodes (50-pack)** | Medical supply | ~$200 | Conductive gel pads with metal snap |
-| **Shielded Audio Cable** | Jin Hua | ~$80 | Noise reduction (cut to <20cm) |
+| **Ag/AgCl Electrodes (5-pack)** | Medical supply | $40 | Conductive gel pads with metal snap |
 | **USB Power Bank** | Existing | - | **Safety: NEVER use wall power** |
+
+> **[INSERT IMAGE]** `images/img_hardware_components.jpg`
+> *Caption: Full hardware stack including AD8232 sensors, ESP32, and custom cables.*
 
 ### The "Accidental Hardware Match"
 
@@ -46,53 +47,48 @@ The **AD8232** is designed for ECG (heart monitoring), but its hardware bandpass
 
 ---
 
-## Hardware Adaptation: Dual to Single Channel
+## Hardware Adaptation: Dual-Channel to Single-Channel
 
-> [!IMPORTANT]
-> **This section documents a critical pivot during the project.** Full troubleshooting logs are available in [working_process/](../working_process/).
+### Original Design Intent
 
-### Original Plan: Dual-Channel (Chin + Jaw)
+The initial design followed AlterEgo's multi-site electrode approach:
+- **Channel 1 (Digastric/Mylohyoid):** Under-chin placement for tongue position tracking
+- **Channel 2 (Masseter):** Jaw/cheek placement for bite intensity measurement
 
-The initial design followed AlterEgo's multi-site approach:
-- **Channel 1:** Under-chin (Digastric/Mylohyoid) — Tongue position
-- **Channel 2:** Jaw/Cheek (Masseter) — Jaw intensity
+### Hardware Limitation Discovered
 
-### The Problem: AD8232 Baseline Mismatch
+During validation testing (December 19, 2025), the two AD8232 units exhibited significantly different baseline ADC characteristics:
 
-During hardware validation ([2024-12-19_dual_ad8232_troubleshooting.md](../working_process/2024-12-19_dual_ad8232_troubleshooting.md)), the two AD8232 sensors exhibited significantly different baseline ADC values:
+| Sensor | Baseline ADC | Heart LED | Operational Status |
+|--------|--------------|-----------|-------------------|
+| AD8232 #1 (Red PCB) | ~1,800 | Flickering ✓ | Functional |
+| AD8232 #2 (Purple PCB) | ~3,800 | Not flickering | Saturation risk |
 
-| Sensor | Baseline ADC | Heart LED | Status |
-|--------|--------------|-----------|--------|
-| AD8232 #1 (Red PCB) | ~1.8K | Flickering ✅ | Working |
-| AD8232 #2 (Purple PCB) | ~3.8K | NOT flickering ⚠️ | Saturation risk |
+The second sensor's baseline near the 12-bit ADC ceiling (4095) meant that any muscle activation would saturate the signal, resulting in clipped waveforms and loss of amplitude information. Serial monitor output during testing:
 
-**Serial Monitor Capture:**
 ```
 ADC: 3796 | LO+: 1 | LO-: 1 | Status: ✓ Board responding
 ADC: 3823 | LO+: 1 | LO-: 1 | Status: ✓ Board responding
 ADC: 3921 | LO+: 1 | LO-: 1 | Status: ⚠️ ADC RAILING HIGH
 ```
 
-The second sensor's baseline near the 12-bit ADC ceiling (4095) meant any muscle activation would saturate the signal, losing critical amplitude information.
+> **[INSERT VIDEO]** [Loom Recording: Dual AD8232 Troubleshooting](https://www.loom.com/share/a893fc0e55334356979a57ffecdbcfa3)
+> *Caption: Video documentation of the troubleshooting session identifying the saturation issue.*
 
-### The Decision: Single-Channel Focus
+### Design Decision: Single-Channel Focus
 
-After extensive troubleshooting documented in video ([Loom Recording](https://www.loom.com/share/a893fc0e55334356979a57ffecdbcfa3)), a pragmatic decision was made:
+Given the hardware constraint, a pragmatic decision was made to proceed with single-channel data collection using the functional AD8232 unit. This decision was informed by analysis of feature discrimination capabilities:
 
-> **Use only the working AD8232 for the under-chin (Digastric) channel.**
+| Feature Type | Dual-Channel | Single-Channel | Notes |
+|--------------|--------------|----------------|-------|
+| Spatial (chin vs jaw ratio) | ✓ Available | ✗ Lost | Cannot compare channel ratios |
+| Temporal (firing sequence) | ✓ Available | ✓ Preserved | Primary discriminator |
+| Frequency (ZCR, spectral) | ✓ Available | ✓ Preserved | Secondary discriminator |
+| Amplitude (signal strength) | ✓ Available | ⚠ Reduced | Lower confidence without reference |
 
-This was informed by the analysis in [2024-12-19_single_channel_discrimination.md](../working_process/2024-12-19_single_channel_discrimination.md):
+**Mitigation Strategy:** With single-channel operation, the classification model must rely primarily on **temporal features** (onset timing, duration, activation sequence) and **frequency features** (zero-crossing rate, spectral characteristics) rather than spatial discrimination between electrode sites.
 
-| Feature Type | Dual-Channel | Single-Channel |
-|--------------|--------------|----------------|
-| Spatial (chin vs jaw ratio) | ✅ | ❌ Lost |
-| Temporal (firing sequence) | ✅ | ✅ Preserved |
-| Frequency (ZCR, spectral) | ✅ | ✅ Preserved |
-
-**Key Insight:** With single-channel, the model must rely on **temporal + frequency features** (~90%) rather than spatial discrimination. This is feasible because:
-1. Each word has a distinct **sequence of muscle activation**
-2. Different tongue movements create different **EMG frequency signatures**
-3. Our vocabulary was chosen for **maximal phonetic contrast**
+Full analysis documented in: [2025-12-19_single_channel_discrimination.md](../working_process/2025-12-19_single_channel_discrimination.md)
 
 ---
 
@@ -112,6 +108,9 @@ GND      →    GND
 GPIO34   →    OUTPUT
 ```
 
+> **[INSERT IMAGE]** `images/img_wiring_sdn_fix.jpg`
+> *Caption: Close-up of the SDN pin jumping to 3.3V to prevent signal floating.*
+
 ### 2. Cable Shielding (Noise Reduction)
 
 The stock 3-lead cable (~1 meter) acts as an antenna for 60Hz noise.
@@ -121,31 +120,26 @@ The stock 3-lead cable (~1 meter) acts as an antenna for 60Hz noise.
 2. **Twisted Pair:** Twist Signal+ and Signal- wires together (maximizes CMRR)
 3. Or use **shielded microphone cable**
 
+> **[INSERT IMAGE]** `images/img_shielded_cable_cut.jpg`
+> *Caption: Modified short-length shielded cable to minimize uptake of 60Hz mains hum.*
+
 ---
 
 ## Electrode Placement
 
+### Anatomical Targets
+
+The electrode placement targets the **Digastric/Mylohyoid muscle group**, which controls tongue elevation and depression during speech articulation.
+
+![Digastric muscle anatomy](images/anatomy_digastric_muscle.png)
+*Figure 1: Lateral view of neck musculature with digastric muscle highlighted (red). This muscle group contracts during tongue movement, producing the sEMG signal detected by under-chin electrodes. (Source: Gray's Anatomy, Public Domain, via Wikimedia Commons)*
+
+The ground electrode is placed on the **Mastoid Process**—the bony protrusion behind the ear—which provides an electrically neutral reference point away from active musculature.
+
+![Mastoid process anatomy](images/anatomy_mastoid_process.png)
+*Figure 2: Skull showing mastoid process (red) of the temporal bone. This location is ideal for ground electrode placement due to minimal muscle activity and proximity to the signal electrodes. (Source: Wikimedia Commons, CC BY-SA 4.0)*
+
 ### Single-Channel Configuration
-
-With one working AD8232, we focus on the under-chin position which captures **tongue movement**—the primary discriminator for our vocabulary.
-
-### Anatomical Reference
-
-The electrode placement targets two key anatomical structures:
-
-**1. Digastric/Mylohyoid Muscle (Signal Electrodes)**
-
-![Digastric muscle anatomy showing the under-chin muscles that control tongue movement. Source: Gray's Anatomy, via Wikimedia Commons.](images/anatomy_digastric_muscle.png)
-
-*Figure: Lateral view of neck musculature with digastric muscle highlighted in red. This muscle group under the chin contracts during tongue movement—our primary signal source. (Gray's Anatomy, Public Domain)*
-
-**2. Mastoid Process (Ground Electrode)**
-
-![Mastoid process of the temporal bone, located behind the ear. Source: Wikimedia Commons.](images/anatomy_mastoid_process.png)
-
-*Figure: Skull showing mastoid process (red) behind the ear. This bony prominence provides an electrically neutral reference point for the ground electrode. (Wikimedia Commons, CC BY-SA 4.0)*
-
-### Electrode Configuration
 
 ![Electrode placement schematic showing chin positions](images/viz_electrode_schematic.png)
 
@@ -157,9 +151,12 @@ The electrode placement targets two key anatomical structures:
 | **Signal- (Yellow)** | Under-chin, right of centerline, 2-3cm apart | Differential signal |
 | **Reference (Green)** | Mastoid process (behind ear) | Electrically neutral ground |
 
+> **[INSERT IMAGE]** `images/img_electrode_placement_chin.jpg`
+> *Caption: Electrode placement under the chin targeting the Digastric muscle.*
+
 ### 3.5mm Jack Wiring Mapping
 
-Confirmed via testing ([2024-12-18_wiring_mapping_session.md](../working_process/2024-12-18_wiring_mapping_session.md)):
+Verified experimentally (see [2025-12-18_wiring_mapping_session.md](../working_process/2025-12-18_wiring_mapping_session.md)):
 
 | 3.5mm Plug Segment | Wire Color | Body Placement |
 |--------------------|------------|----------------|
@@ -178,15 +175,24 @@ To ensure signal integrity before data collection, a 3-step "Parking Lot Test" w
 - **Success Criteria:** Clean, rhythmic QRS complex (heartbeat) every ~1s.
 - **Purpose:** Verifies sensor and ADC functionality.
 
+> **[INSERT IMAGE]** `images/img_serial_plotter_heartbeat.png`
+> *Caption: Clean ECG signal confirming sensor health.*
+
 **Step 2: Jaw Clench Noise Check**
 - Electrodes on Jaw. Bite down hard.
 - **Success Criteria:** Signal "explodes" into high-amplitude chaos (>2000 units).
 - **Purpose:** Verifies electrodes are making contact and amplifier isn't saturated.
 
+> **[INSERT IMAGE]** `images/img_serial_plotter_jaw_clench.png`
+> *Caption: High-amplitude EMG burst during forceful jaw clench.*
+
 **Step 3: Subvocalization "Wiggle"**
 - Electrodes on Chin. Say "GHOST" internally.
 - **Success Criteria:** Small but distinct disturbance from baseline noise.
 - **Purpose:** Confirms detection of fine motor units in the tongue.
+
+> **[INSERT IMAGE]** `images/img_serial_plotter_subvocal.png`
+> *Caption: The "Wiggle" — subtle but distinct EMG signature of the subvocalized word "GHOST".*
 
 ---
 
@@ -200,7 +206,7 @@ Words were chosen based on **distinct neuromuscular signatures**, not semantic m
 
 Since electrodes are under the chin, we're tracking **tongue position**, not sound. Choose words that force the tongue to do radically different things.
 
-### Tier 1: High Success Rate (Used in Data Collection)
+### Tier 1: High Success Rate
 
 | Word | Tongue Physics | Expected Signal |
 |------|----------------|-----------------|
@@ -232,16 +238,16 @@ To validate the low-cost hardware, we employ a **Transfer Learning** strategy ac
 | 4 | **Silent Articulation** | **Closed-Mouth** speech with exaggerated internal tongue movement | 🔊🔊 | **Testing Data** (Target) |
 | 5 | **Imagined Speech** | Minimal/Micro-movements (Reading to self) | 🔊 | Exploratory |
 
-### Data Collected (December 19, 2024)
+### Data Collection Summary
 
-Full capture session documented in [2024-12-19_speech_spectrum_capture_session.md](../working_process/2024-12-19_speech_spectrum_capture_session.md).
+Data was collected across all five motor intensity levels on December 19, 2025. Full session documentation: [2025-12-19_speech_spectrum_capture_session.md](../working_process/2025-12-19_speech_spectrum_capture_session.md)
 
-| Level | Cycles | Words | Output File |
-|-------|--------|-------|-------------|
+| Level | Cycles Completed | Vocabulary | Output File |
+|-------|------------------|------------|-------------|
 | L1 Overt | 10 | GHOST, LEFT, STOP, REST | `overt_data.csv` |
 | L2 Whisper | 10 | GHOST, LEFT, STOP, REST | `whisper_data.csv` |
 | L3 Mouthing | 50 | GHOST, LEFT, STOP, REST | `mouthing_data.csv` |
-| L4 Subvocal | 51+ | GHOST, LEFT, STOP, REST | `subvocal_data.csv` |
+| L4 Subvocal | 51 | GHOST, LEFT, STOP, REST | `subvocal_data.csv` |
 | L5 Imagined | 10 | GHOST, LEFT, STOP, REST | `imagined_data.csv` |
 
 ### Transfer Learning Rationale
@@ -253,25 +259,22 @@ We assume that the *temporal sequence* of muscle activation (e.g., G-H-O-S-T) re
 
 ---
 
-## Known Confounds & Limitations
+## Known Confounds and Limitations
 
-> [!WARNING]
-> **Researcher Honesty:** The following artifacts were observed during data collection and should be considered when interpreting results.
+The following artifacts were observed during data collection and documented for transparency:
 
-Documented in [2024-12-19_speech_spectrum_capture_session.md](../working_process/2024-12-19_speech_spectrum_capture_session.md):
-
-| Confound | Description | Impact |
-|----------|-------------|--------|
-| **Saliva Swallowing** | Periodic swallowing creates spurious EMG bursts | May contaminate REST labels |
-| **Post-Mouthing Tension** | After L3 trials, chin muscles remain partially activated ("pufferfishing") | REST after mouthing ≠ true baseline |
-| **Syllabic Beat Artifact** | Involuntary micro-movement synchronized to word rhythm, even in L5 | "Pure mental" may still contain motor artifacts |
-| **Recording Timing** | Words vocalized at countdown "2" (not "1" or "3") to center signal in window | Consistent across all levels |
+| Confound | Description | Potential Impact |
+|----------|-------------|------------------|
+| **Saliva Swallowing** | Periodic swallowing creates spurious EMG bursts unrelated to speech | May contaminate REST class labels |
+| **Post-Mouthing Muscle Tension** | After extensive L3 trials, chin muscles remain partially activated | REST labels after mouthing may not represent true baseline |
+| **Syllabic Beat Artifact** | Involuntary micro-movements synchronized to word rhythm, even during L5 | "Imagined speech" may contain detectable motor artifacts |
+| **Recording Timing Convention** | Words vocalized at countdown "2" to center signal in analysis window | Consistent across all levels; enables time-alignment |
 
 ---
 
 ## Prior Work Context
 
-This dataset builds on **Phase 3** (Kho, 2024), which validated:
+This dataset builds on **Phase 3** (Kho, 2025), which validated:
 - AD8232 sensor efficacy for EMG capture (SDN pin fix discovered)
 - 18 ML architecture benchmark on 1.54M data points
 - Random Forest as Pareto-optimal for ESP32 deployment (74% accuracy, 0.01ms)
@@ -285,16 +288,18 @@ This dataset builds on **Phase 3** (Kho, 2024), which validated:
 |-----------|-------|-----------|
 | **Sampling Rate** | 1000Hz | Nyquist: fₛ > 2×450Hz (EMG bandwidth) |
 | **ADC Resolution** | 12-bit (0-4095) | ESP32 native |
-| **Window Size** | 3 seconds per word | Countdown-aligned (vocalize at "2") |
-| **Channels** | 1 (single AD8232) | Under-chin only (see [Hardware Adaptation](#hardware-adaptation-dual-to-single-channel)) |
+| **Window Size** | 3 seconds per word | Countdown-aligned capture |
+| **Channels** | 1 (single AD8232) | Under-chin only (hardware constraint) |
 | **Power Source** | USB Battery Bank | **Safety: No wall power with face electrodes** |
 
 ---
 
 ## References
 
-1. Kapur, A., Kapur, S., & Maes, P. (2018). AlterEgo: A personalized wearable silent speech interface. *23rd International Conference on Intelligent User Interfaces*, 43-53. https://doi.org/10.1145/3172944.3172977
+1. Kapur, A., Kapur, S., & Maes, P. (2018). AlterEgo: A personalized wearable silent speech interface. *Proceedings of the 23rd International Conference on Intelligent User Interfaces*, 43-53. https://doi.org/10.1145/3172944.3172977
 
-2. Kho, C. V. (2024). Phase 3: EMG-Based Gesture Classification with AD8232. *Minerva University CS156 Project Archive*.
+2. Kho, C. V. (2025). Phase 3: EMG-Based Gesture Classification with AD8232. *Minerva University CS156 Project Archive*.
 
 3. Analog Devices. (2012). AD8232: Single-Lead, Heart Rate Monitor Front End. *Datasheet*. https://www.analog.com/media/en/technical-documentation/data-sheets/ad8232.pdf
+
+4. Gray, H. (1918). *Anatomy of the Human Body*. Philadelphia: Lea & Febiger. (Digastric muscle illustration, Public Domain)

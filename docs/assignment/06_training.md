@@ -2,7 +2,7 @@
 
 ## Overview
 
-This section covers training procedures, cross-validation, and hyperparameter tuning for both the MaxCRNN (novel technique) and Random Forest (deployment baseline).
+This section covers training procedures, cross-validation, and hyperparameter tuning for both the MaxCRNN (novel technique) and Random Forest (deployment baseline) using single-channel sEMG data.
 
 ## Training Configuration
 
@@ -10,11 +10,18 @@ This section covers training procedures, cross-validation, and hyperparameter tu
 
 ```python
 import tensorflow as tf
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 
 def train_maxcrnn(model, X_train, y_train, X_val, y_val):
     """
     Train MaxCRNN with best practices from Phase 3.
+
+    Args:
+        model: Compiled MaxCRNN model
+        X_train: Training windows, shape (N, 3000, 1)
+        y_train: Training labels, shape (N,)
+        X_val: Validation windows
+        y_val: Validation labels
     """
     # Compile
     model.compile(
@@ -35,6 +42,11 @@ def train_maxcrnn(model, X_train, y_train, X_val, y_val):
             factor=0.5,
             patience=20,
             min_lr=1e-6
+        ),
+        ModelCheckpoint(
+            'best_maxcrnn.keras',
+            monitor='val_accuracy',
+            save_best_only=True
         )
     ]
 
@@ -51,13 +63,16 @@ def train_maxcrnn(model, X_train, y_train, X_val, y_val):
     return history
 ```
 
+> **[INSERT IMAGE]** `images/viz_training_curves.png`
+> *Caption: Training and validation loss/accuracy curves showing convergence.*
+
 ### Hyperparameter Configuration
 
 | Model | Parameter | Value | Rationale |
 |-------|-----------|-------|-----------|
-| **MaxCRNN** | Learning Rate | 0.0005 | Lower for stability |
-| | Batch Size | 64 | Memory efficient |
-| | Patience | 50 | Allow convergence |
+| **MaxCRNN** | Learning Rate | 0.0005 | Lower for stability with attention layers |
+| | Batch Size | 64 | Memory efficient on A100 |
+| | Patience | 50 | Allow convergence on small dataset |
 | | Dropout | 0.3-0.5 | Prevent overfitting |
 | **Random Forest** | N Estimators | 100 | Balanced accuracy/speed |
 | | Max Features | √N | Standard heuristic |
@@ -65,7 +80,7 @@ def train_maxcrnn(model, X_train, y_train, X_val, y_val):
 
 ## Data Augmentation
 
-The Phase 3 study showed data augmentation boosted 1D CNN accuracy from 49.63% to **78.36%**. We apply similar techniques:
+Phase 3 showed data augmentation boosted 1D CNN accuracy from 49.63% to **78.36%**. We apply similar techniques adapted for single-channel:
 
 ```python
 import numpy as np
@@ -73,12 +88,12 @@ import numpy as np
 def augment_window(window: np.ndarray,
                    jitter_std: float = 0.05,
                    scale_range: tuple = (0.9, 1.1),
-                   shift_max: int = 50) -> np.ndarray:
+                   shift_max: int = 100) -> np.ndarray:
     """
-    Apply data augmentation to EMG window.
+    Apply data augmentation to single-channel EMG window.
 
     Args:
-        window: Shape (1000, 2) dual-channel window
+        window: Shape (3000, 1) single-channel window
         jitter_std: Gaussian noise standard deviation
         scale_range: Amplitude scaling range
         shift_max: Maximum time shift (samples)
@@ -105,6 +120,15 @@ def create_augmented_dataset(X: np.ndarray,
                              augmentation_factor: int = 5) -> tuple:
     """
     Create augmented training set.
+
+    Args:
+        X: Original windows, shape (N, 3000, 1)
+        y: Original labels, shape (N,)
+        augmentation_factor: Number of augmented copies (including original)
+
+    Returns:
+        X_aug: Augmented windows, shape (N*factor, 3000, 1)
+        y_aug: Augmented labels, shape (N*factor,)
     """
     X_aug = [X]
     y_aug = [y]
@@ -117,6 +141,9 @@ def create_augmented_dataset(X: np.ndarray,
     return np.vstack(X_aug), np.hstack(y_aug)
 ```
 
+> **[INSERT IMAGE]** `images/viz_augmentation_examples.png`
+> *Caption: Examples of original vs. augmented EMG windows showing jitter, scaling, and time shift effects.*
+
 ## Cross-Validation
 
 ### 5-Fold Stratified CV
@@ -127,10 +154,15 @@ from sklearn.model_selection import cross_val_score, StratifiedKFold
 def evaluate_with_cv(model, X, y, n_splits=5):
     """
     Evaluate model with stratified cross-validation.
+
+    Args:
+        model: Sklearn-compatible classifier
+        X: Feature matrix, shape (N, 4) for statistical features
+        y: Labels, shape (N,)
+        n_splits: Number of CV folds
     """
     cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=1738)
 
-    # For sklearn models
     scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy')
 
     print(f"CV Accuracy: {scores.mean():.4f} ± {scores.std():.4f}")
@@ -141,6 +173,7 @@ def evaluate_with_cv(model, X, y, n_splits=5):
 
 ```python
 from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
 
 def tune_random_forest(X_train, y_train):
     """
@@ -162,6 +195,9 @@ def tune_random_forest(X_train, y_train):
     return grid_search.best_estimator_
 ```
 
+> **[INSERT IMAGE]** `images/viz_hyperparameter_search.png`
+> *Caption: Grid search results showing accuracy across hyperparameter combinations.*
+
 ## Training Logs (Expected Output)
 
 ```
@@ -175,9 +211,68 @@ Epoch 150/1000
 Early stopping at epoch 150, restoring best weights from epoch 100
 ```
 
+## Transfer Learning Metrics
+
+During training, we monitor both source domain (L3) and target domain (L4) performance:
+
+```python
+class TransferMetricsCallback(tf.keras.callbacks.Callback):
+    """
+    Custom callback to monitor performance on target domain during training.
+    """
+    def __init__(self, X_target, y_target):
+        self.X_target = X_target
+        self.y_target = y_target
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch % 10 == 0:
+            y_pred = self.model.predict(self.X_target, verbose=0)
+            y_pred_classes = np.argmax(y_pred, axis=1)
+            target_acc = np.mean(y_pred_classes == self.y_target)
+            print(f"\n  → Target Domain (L4) Accuracy: {target_acc:.4f}")
+```
+
+> **[INSERT IMAGE]** `images/viz_transfer_learning_gap.png`
+> *Caption: Training curve showing source (L3) vs. target (L4) accuracy gap over epochs.*
+
 ## Resource Considerations
 
-| Model | Training Time | GPU Required | Memory |
-|-------|---------------|--------------|--------|
-| **MaxCRNN** | ~30 min | Yes (A100) | 8GB |
-| **Random Forest** | ~5 sec | No | <1GB |
+| Model | Training Time | GPU | Memory | Dataset Size |
+|-------|---------------|-----|--------|--------------|
+| **MaxCRNN** | ~30 min | A100 (recommended) | 8GB | ~200 windows |
+| **MaxCRNN** | ~2 hrs | T4 | 16GB | ~200 windows |
+| **Random Forest** | ~5 sec | CPU only | <1GB | ~200 windows |
+
+### Colab Pro Configuration
+
+```python
+# Verify A100 GPU
+!nvidia-smi
+
+# Expected output:
+# Tesla A100-SXM4-40GB
+
+# Enable mixed precision for faster training
+from tensorflow.keras import mixed_precision
+mixed_precision.set_global_policy('mixed_float16')
+```
+
+## Checkpointing and Model Export
+
+```python
+# Save best model
+model.save('maxcrnn_phase4_final.keras')
+
+# Export for TensorFlow Lite (ESP32 deployment)
+converter = tf.lite.TFLiteConverter.from_keras_model(model)
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
+tflite_model = converter.convert()
+
+with open('maxcrnn_phase4.tflite', 'wb') as f:
+    f.write(tflite_model)
+
+print(f"TFLite model size: {len(tflite_model) / 1024:.1f} KB")
+```
+
+> **[INSERT IMAGE]** `images/viz_model_size_comparison.png`
+> *Caption: Model size comparison showing Keras vs. TFLite optimized versions.*

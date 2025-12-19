@@ -2,7 +2,7 @@
 
 ## Overview
 
-This section discusses model selection for **Silent Articulation classification**, including a **novel technique not covered in class**: the **MaxCRNN** (Inception + Bi-LSTM + Attention) architecture.
+This section discusses model selection for **Silent Articulation classification** from single-channel sEMG signals, including a **novel technique not covered in class**: the **MaxCRNN** (Inception + Bi-LSTM + Attention) architecture.
 
 ## Model Selection Rationale
 
@@ -13,18 +13,35 @@ Following Phase 3's methodology, we evaluate models across increasing complexity
 | Tier | Models | Feature Set | Compute |
 |------|--------|-------------|---------|
 | **Heuristics** | Threshold, Variance | Raw amplitude | O(N) |
-| **Classical ML** | Random Forest, SVM | Statistical (Set A) | O(N log N) |
-| **Deep Learning** | 1D CNN, CRNN | Raw sequence (Set B) | O(N²) |
-| **Transfer Learning** | MobileNetV2, ResNet50 | Spectrograms (Set C) | O(N³) |
+| **Classical ML** | Random Forest, SVM | Statistical (MAV, ZCR, SD, MAX) | O(N log N) |
+| **Deep Learning** | 1D CNN, CRNN | Raw sequence | O(N²) |
+| **Transfer Learning** | MobileNetV2, ResNet50 | Spectrograms | O(N³) |
 | **Custom** | **MaxCRNN** | Raw + Attention | O(N² log N) |
+
+> **[INSERT IMAGE]** `images/viz_model_ladder.png`
+> *Caption: Model complexity ladder from simple heuristics to custom deep learning architectures.*
+
+### Single-Channel Adaptations
+
+With single-channel input (3000×1 instead of 1000×2), model architectures are adapted:
+
+| Component | Dual-Channel | Single-Channel |
+|-----------|--------------|----------------|
+| Input shape | (1000, 2) | (3000, 1) |
+| Inception filters | 64, 128 | 32, 64 (reduced) |
+| LSTM units | 128 | 64 (reduced) |
+| Total parameters | ~1.2M | ~400K |
 
 ## Novel Technique: MaxCRNN Architecture
 
 ### High-Level Architecture
 
 ```
-Input (1000×2) → Inception Blocks → Bi-LSTM → Multi-Head Attention → Softmax
+Input (3000×1) → Inception Blocks → Bi-LSTM → Multi-Head Attention → Softmax
 ```
+
+> **[INSERT IMAGE]** `images/viz_maxcrnn_architecture.png`
+> *Caption: MaxCRNN architecture diagram showing Inception blocks, Bi-LSTM, and attention layers.*
 
 ### Mathematical Foundations
 
@@ -42,7 +59,10 @@ $$
 \mathbf{h}_{k×1} = \text{ReLU}(\text{Conv1D}(\mathbf{x}, \mathbf{W}_k))
 $$
 
-**Intuition:** Different kernel sizes capture temporal patterns at different scales (individual motor pulses vs. sustained contractions).
+**Intuition:** Different kernel sizes capture temporal patterns at different scales—individual motor pulses (small kernels) vs. sustained tongue movements (large kernels).
+
+> **[INSERT IMAGE]** `images/viz_inception_block.png`
+> *Caption: Inception block showing parallel 1×1, 3×3, 5×5 convolutions and max pooling branch.*
 
 #### 2. Bidirectional LSTM (Temporal Modeling)
 
@@ -79,7 +99,7 @@ $$
 \mathbf{h}_t = \mathbf{o}_t \odot \tanh(\mathbf{C}_t)
 $$
 
-**Intuition:** LSTM captures long-range temporal dependencies in the muscle activation sequence.
+**Intuition:** LSTM captures long-range temporal dependencies in the muscle activation sequence—critical for distinguishing words with similar onsets but different endings.
 
 #### 3. Multi-Head Attention (Selective Focus)
 
@@ -101,23 +121,26 @@ $$
 \text{head}_i = \text{Attention}(\mathbf{Q}\mathbf{W}_i^Q, \mathbf{K}\mathbf{W}_i^K, \mathbf{V}\mathbf{W}_i^V)
 $$
 
-**Intuition:** Attention allows the model to focus on the most discriminative time points (e.g., the onset of a tongue movement).
+**Intuition:** Attention allows the model to focus on the most discriminative time points (e.g., the onset of tongue movement) rather than treating all timesteps equally.
+
+> **[INSERT IMAGE]** `images/viz_attention_weights.png`
+> *Caption: Visualization of attention weights showing focus on word onset and offset regions.*
 
 ### Complete MaxCRNN Pseudocode
 
 ```
-Algorithm: MaxCRNN Forward Pass
-─────────────────────────────────────
-Input: x ∈ ℝ^(1000×2)  // Dual-channel window
+Algorithm: MaxCRNN Forward Pass (Single-Channel)
+─────────────────────────────────────────────────
+Input: x ∈ ℝ^(3000×1)  // Single-channel window
 Output: ŷ ∈ ℝ^K        // Class probabilities
 
-1. h₁ ← InceptionBlock(x)           // Multi-scale features
-2. h₂ ← InceptionBlock(h₁)          // Stack 2 blocks
-3. h₃ ← BiLSTM(h₂, units=128)       // Temporal modeling
-4. h_attn ← MultiHeadAttention(h₃)  // Selective focus
+1. h₁ ← InceptionBlock(x, filters=32)   // Multi-scale features
+2. h₂ ← InceptionBlock(h₁, filters=64)  // Stack 2 blocks
+3. h₃ ← BiLSTM(h₂, units=64)            // Temporal modeling
+4. h_attn ← MultiHeadAttention(h₃)      // Selective focus
 5. h_pool ← GlobalAveragePool(h_attn)
 6. ŷ ← Softmax(Dense(h_pool))
-─────────────────────────────────────
+─────────────────────────────────────────────────
 ```
 
 ## Model Initialization Code
@@ -126,38 +149,38 @@ Output: ŷ ∈ ℝ^K        // Class probabilities
 import tensorflow as tf
 from tensorflow.keras import layers, Model
 
-def build_maxcrnn(input_shape: tuple = (1000, 2),
+def build_maxcrnn(input_shape: tuple = (3000, 1),
                   n_classes: int = 4) -> Model:
     """
-    Build the MaxCRNN architecture.
+    Build the MaxCRNN architecture for single-channel sEMG.
 
     Architecture: Inception → Bi-LSTM → Multi-Head Attention
     """
     inputs = layers.Input(shape=input_shape)
 
     # Inception Block 1
-    x = inception_block(inputs, filters=64)
+    x = inception_block(inputs, filters=32)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.3)(x)
 
     # Inception Block 2
-    x = inception_block(x, filters=128)
+    x = inception_block(x, filters=64)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.3)(x)
 
-    # Bi-LSTM
-    x = layers.Bidirectional(layers.LSTM(128, return_sequences=True))(x)
+    # Bi-LSTM (reduced units for single-channel)
+    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True))(x)
 
     # Multi-Head Attention
-    x = layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+    x = layers.MultiHeadAttention(num_heads=4, key_dim=16)(x, x)
 
     # Classification Head
     x = layers.GlobalAveragePooling1D()(x)
-    x = layers.Dense(64, activation='relu')(x)
+    x = layers.Dense(32, activation='relu')(x)
     x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(n_classes, activation='softmax')(x)
 
-    return Model(inputs, outputs, name='MaxCRNN')
+    return Model(inputs, outputs, name='MaxCRNN_SingleChannel')
 
 
 def inception_block(x, filters: int):
@@ -175,7 +198,7 @@ def inception_block(x, filters: int):
 
 ## Baseline Comparison: Random Forest
 
-For ESP32 deployment, Random Forest remains the Pareto-optimal choice:
+For ESP32 deployment, Random Forest remains the Pareto-optimal choice from Phase 3:
 
 $$
 G = 1 - \sum_{k=1}^{K} p_k^2 \quad \text{(Gini Impurity)}
@@ -192,3 +215,36 @@ rf_model = RandomForestClassifier(
     random_state=1738
 )
 ```
+
+### Phase 3 Benchmark Results
+
+| Model | Accuracy | Precision | Inference (ms) | Memory (KB) |
+|-------|----------|-----------|----------------|-------------|
+| Random Forest | 74% | 76% | 0.01 | <50 |
+| MaxCRNN | TBD | 99%* | 50-100 | ~400 |
+
+*Phase 3 MaxCRNN achieved 99% precision on safety-critical class (CLENCH).
+
+> **[INSERT IMAGE]** `images/viz_model_comparison.png`
+> *Caption: Pareto frontier showing accuracy vs. inference time for all evaluated models.*
+
+## Model Selection Summary
+
+| Use Case | Recommended Model | Rationale |
+|----------|-------------------|-----------|
+| **ESP32 Deployment** | Random Forest | Low latency, small memory footprint |
+| **Maximum Precision** | MaxCRNN | Attention-based onset detection |
+| **Quick Baseline** | SVM (RBF) | Fast training, interpretable |
+
+> **[INSERT IMAGE]** `images/viz_pareto_frontier.png`
+> *Caption: Pareto frontier plot showing trade-off between accuracy and computational cost.*
+
+## References
+
+1. Szegedy, C., et al. (2015). Going Deeper with Convolutions. *CVPR*. https://arxiv.org/abs/1409.4842
+
+2. Hochreiter, S., & Schmidhuber, J. (1997). Long Short-Term Memory. *Neural Computation*, 9(8), 1735-1780.
+
+3. Vaswani, A., et al. (2017). Attention Is All You Need. *NeurIPS*. https://arxiv.org/abs/1706.03762
+
+4. Kho, C. V. (2025). Phase 3: EMG-Based Gesture Classification with AD8232. *Minerva University CS156 Project Archive*.
