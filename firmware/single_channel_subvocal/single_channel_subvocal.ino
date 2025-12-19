@@ -1,7 +1,8 @@
 /*
  * Single Channel AD8232 - Phase 4 Subvocalization
+ * WITH BASELINE CALIBRATION
  *
- * Uses ONE working AD8232 sensor for submental EMG capture.
+ * Uses ONE working AD8232 sensor (the 1.8K baseline one).
  * Position electrodes under chin for subvocalization detection.
  *
  * Wiring:
@@ -17,7 +18,9 @@
 // ============ CONFIGURATION ============
 #define SAMPLE_RATE_HZ 500
 #define BAUD_RATE 115200
+#define CALIBRATION_SAMPLES 200
 
+int baseline = 2048;
 const int sampleDelayMs = 1000 / SAMPLE_RATE_HZ;
 
 void setup() {
@@ -27,22 +30,34 @@ void setup() {
   pinMode(LO_MINUS, INPUT);
 
   Serial.println("Single Channel Subvocal EMG - Phase 4");
-  Serial.println("Format: EMG_Value,LeadsOff");
+  Serial.println("Calibrating... RELAX YOUR FACE!");
+  delay(2000);
+
+  calibrateBaseline();
+
+  Serial.print("Baseline: "); Serial.println(baseline);
+  Serial.println("Format: Deviation,LeadsOff");
   Serial.println("---");
-  delay(1000);
+  delay(500);
+}
+
+void calibrateBaseline() {
+  long sum = 0;
+  for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
+    sum += analogRead(EMG_OUTPUT);
+    delay(5);
+  }
+  baseline = sum / CALIBRATION_SAMPLES;
 }
 
 void loop() {
-  // Check leads-off detection
-  int lo_plus = digitalRead(LO_PLUS);
-  int lo_minus = digitalRead(LO_MINUS);
-  int leads_off = (lo_plus == 1 || lo_minus == 1) ? 1 : 0;
+  int leads_off = (digitalRead(LO_PLUS) == 1 || digitalRead(LO_MINUS) == 1) ? 1 : 0;
 
-  // Read EMG signal (0-4095)
-  int emg_value = analogRead(EMG_OUTPUT);
+  int raw = analogRead(EMG_OUTPUT);
+  int deviation = raw - baseline;  // Centered around 0
 
-  // Output: EMG_Value,LeadsOff (0=connected, 1=leads off)
-  Serial.print(emg_value);
+  // Output: Deviation,LeadsOff
+  Serial.print(deviation);
   Serial.print(",");
   Serial.println(leads_off);
 
