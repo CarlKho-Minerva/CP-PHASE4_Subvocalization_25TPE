@@ -111,6 +111,7 @@ With USB pointing toward row 0:
 ---
 
 ## WIRING CONNECTIONS
+**Confirmed by Carl Kho on 12/19/2024**
 
 ### Step 1: Power Rails Setup
 ```
@@ -124,19 +125,19 @@ ESP32 GND  ──────→  - (blue) power rail
 | GND | Power rail (-) | Black |
 | 3.3V | Power rail (+) | Red |
 | OUTPUT | ESP32 GPIO34 | Yellow |
-| SDN | Power rail (+) | Red (⚠️ CRITICAL!) |
-| **LO+** | **ESP32 GPIO32** | Gray (⚠️ CONNECT!) |
-| **LO-** | **ESP32 GPIO33** | Magenta (⚠️ CONNECT!) |
+| SDN | Power rail (+) | White *(for now. should be red.)* |
+| **LO+** | **ESP32 GPIO32** | Gray |
+| **LO-** | **ESP32 GPIO33** | Magenta |
 
 ### Step 3: AD8232 #2 (Purple PCB - Jaw Sensor)
 | AD8232 #2 Pin | Connect To | Wire Color (suggested) |
 |---------------|------------|------------------------|
 | GND | Power rail (-) | Black |
-| 3.3V | Power rail (+) | Red |
-| OUTPUT | ESP32 GPIO36 (VP) | Green |
-| SDN | Power rail (+) | Red (⚠️ CRITICAL!) |
-| **LO+** | **ESP32 GPIO25** | Gray (⚠️ CONNECT!) |
-| **LO-** | **ESP32 GPIO26** | Magenta (⚠️ CONNECT!) |
+| 3.3V | Power rail (+) | Brown *(for now. should be red.)* |
+| OUTPUT | ESP32 GPIO36 (VP) | Orange |
+| SDN | Power rail (+) | Green *(for now. should be red.)* |
+| **LO+** | **ESP32 GPIO25** | Gray |
+| **LO-** | **ESP32 GPIO26** | Magenta |
 
 > ⚠️ **Phase 3 Lesson Learned:** LO+/LO- are NOT optional! They enable leads-off detection which is critical for debugging and filtering bad readings.
 
