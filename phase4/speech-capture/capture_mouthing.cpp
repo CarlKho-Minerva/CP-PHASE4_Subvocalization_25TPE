@@ -39,7 +39,7 @@ void signal_handler(int signum) {
 // Configuration
 const int BAUD_RATE = 230400;
 const std::string OUTPUT_FILE = "mouthing_data.csv";  // Changed for mouthing
-const int CYCLES = 10;  // 10 cycles × 4 words = 40 reps per word
+const int CYCLES = 50;  // 100 cycles × 4 words = 400 reps per word
 
 // ============================================================================
 // SPEECH LABELS FOR MOUTHING (Level 3)

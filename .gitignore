@@ -11,7 +11,7 @@ ENV/
 .venv/
 
 # Data
-*.csv
+# *.csv
 *.npy
 *.pkl
 data/raw/
