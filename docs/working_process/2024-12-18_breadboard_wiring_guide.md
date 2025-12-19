@@ -113,6 +113,18 @@ With USB pointing toward row 0:
 ## WIRING CONNECTIONS
 **Confirmed by Carl Kho on 12/19/2024**
 
+> [!CAUTION]
+> ### ⚡ THE BREADBOARD POWER RAIL TRAP ⚡
+> Full-size (63-row) breadboards have a **BREAK** in the power rails around Row 30!
+>
+> **Symptoms:** One sensor works (fluctuating), the other reads 0 or 4095 constantly.
+>
+> **Fix:** Bridge both rails across the gap with jumper wires:
+> - Red (+) rail: Row 29 → Row 32
+> - Blue (-) rail: Row 29 → Row 32
+>
+> The painted line may look continuous, but the **metal underneath is cut**.
+
 ### Step 1: Power Rails Setup
 ```
 ESP32 3V3  ──────→  + (red) power rail
