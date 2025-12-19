@@ -131,56 +131,82 @@ def plot_pareto_frontier(results_df):
 
 | Finding | Evidence |
 |---------|----------|
-| **MaxCRNN achieves highest accuracy** | ~83% with 99% precision on target class |
-| **Random Forest is Pareto-optimal for ESP32** | 74% accuracy, 0.01ms latency, <50KB |
-| **Data augmentation critical for deep learning** | 29% accuracy boost (49% → 78%) |
-| **Transfer learning partially succeeds** | ~10-15% drop from Open (Level 3) → Closed (Level 4) |
+| **Multi-class classification failed** | 24% accuracy (chance = 25%) |
+| **Binary detection succeeded** | **72.64%** accuracy (WORD vs REST) |
+| **Signal lacks discriminative info** | Per-class stats identical (mean=1921.2, std=9.7) |
+| **Mode collapse in deep models** | MaxCRNN → GHOST 92%, SpecCNN → STOP 80% |
+| **Augmentation had no effect** | -1% accuracy change with 3× augmentation |
 
 ### 2. Deployment Recommendation
 
-For **ESP32 deployment**, use Random Forest with statistical features:
-- Compile to static C++ if/else statements
-- Real-time inference with negligible latency
-- No runtime memory overhead
+For **ESP32 deployment**, use Binary Random Forest:
+- **Use case:** Silence breaker / binary activation detection
+- **Accuracy:** 72.64%
+- **Latency:** <1ms
+- **NOT viable:** Multi-word vocabulary (no discriminative signal)
 
-For **high-accuracy applications** (with GPU), use MaxCRNN:
-- 99% precision eliminates false positives
-- Suitable for safety-critical applications
+### 3. Limitations & Root Causes
 
-### 3. Limitations & Future Work
+| Limitation | Root Cause | Evidence |
+|------------|------------|----------|
+| Single channel | Lost spatial info (jaw vs chin) | Phase 3 worked with 1 channel because muscle is larger |
+| Low SNR | AD8232 not designed for microvolt signals | Subvocal 10-100× weaker than mouthing |
+| Identical per-class stats | Signal = noise + baseline; no word information | GHOST/LEFT/STOP/REST all mean=1921.2 |
 
-| Limitation | Mitigation |
-|------------|------------|
-| Single-subject dataset | Collect from N≥10 subjects |
-| Controlled environment | Real-world noise characterization |
-| Binary class (Level 3 vs 4) | Gradient of motor intensities |
-| Limited vocabulary | Expand to phoneme-level recognition |
+---
 
-## Temporal Smoothing (Post-Processing)
+## Visualization Gallery
 
-```python
-from collections import deque
+### Data Quality Visualizations
 
-def temporal_smoothing(predictions, window_size=5):
-    """
-    Apply majority vote smoothing to reduce transient errors.
+![viz_amplitude_comparison.png](../working_process/colab/phase4_all_results/viz_amplitude_comparison.png)
+*Signal Amplitude Across Motor Intensity Levels: OVERT shows spike artifact; all others show flat baseline.*
 
-    Args:
-        predictions: Raw frame-level predictions
-        window_size: Number of frames for majority vote
-    """
-    smoothed = []
-    buffer = deque(maxlen=window_size)
+![viz_adc_distribution.png](../working_process/colab/phase4_all_results/viz_adc_distribution.png)
+*ADC Distribution: Mouthing (broad) vs Subvocal (narrow spike) - indicates lower variance in target domain.*
 
-    for pred in predictions:
-        buffer.append(pred)
-        if len(buffer) == window_size:
-            majority = max(set(buffer), key=list(buffer).count)
-            smoothed.append(majority)
-        else:
-            smoothed.append(pred)
+### Random Samples per Class
 
-    return np.array(smoothed)
-```
+![viz_random_samples_mouthing.png](../working_process/colab/phase4_all_results/viz_random_samples_mouthing.png)
+*Mouthing (L3): All 4 word classes show visually indistinguishable waveforms.*
 
-This post-processing can boost practical reliability by rejecting transient "glitches," as demonstrated in Phase 3.
+![viz_random_samples_subvocal.png](../working_process/colab/phase4_all_results/viz_random_samples_subvocal.png)
+*Subvocal (L4): Similar pattern - no visible differences between word classes.*
+
+### Spectrograms
+
+![viz_spectrograms.png](../working_process/colab/phase4_all_results/viz_spectrograms.png)
+*Mel-Spectrograms: All 4 classes show identical frequency content.*
+
+### Confusion Matrices
+
+![rf_confusion_matrix.png](../working_process/colab/phase4_all_results/rf_confusion_matrix.png)
+*Random Forest: Near-uniform confusion (22% accuracy).*
+
+![maxcrnn_confusion_matrix.png](../working_process/colab/phase4_all_results/maxcrnn_confusion_matrix.png)
+*MaxCRNN: Mode collapse to GHOST (92-94% of predictions).*
+
+![spectrogram_cnn_confusion.png](../working_process/colab/phase4_all_results/spectrogram_cnn_confusion.png)
+*Spectrogram CNN: Mode collapse to STOP (78-84% of predictions).*
+
+![binary_confusion_matrix.png](../working_process/colab/phase4_all_results/binary_confusion_matrix.png)
+*Binary Classification: 72.64% accuracy - the only success.*
+
+### Model Comparison
+
+![final_comparison.png](../working_process/colab/phase4_all_results/final_comparison.png)
+*Final Strategy Comparison: All multi-class approaches at chance; binary succeeds.*
+
+---
+
+## The Pivot: From Telepathy to Clicker
+
+> *"We are not building a 'Silent Speech Interface.' We are building a 'Biological Clicker'—a hands-free binary switch controlled by chin muscle activation."*
+
+**Viable Product:**
+- Input: Subvocalize any word
+- Output: Binary trigger (On/Off)
+- Use: Hands-free mouse click
+- Hardware: $30 (AD8232 + ESP32)
+- Accuracy: 72.64%
+

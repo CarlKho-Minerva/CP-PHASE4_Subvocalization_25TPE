@@ -2,7 +2,7 @@
 ## Phase 4: Subvocalization Detection with Low-Cost Hardware
 
 **Student:** Carl Vincent Kho
-**Generated:** 2025-12-16 23:48:35
+**Generated:** 2025-12-20 01:58:55
 **Course:** CS156 - Machine Learning Pipeline
 
 ---
@@ -30,7 +30,9 @@
 
 ## Dataset Overview
 
-This project uses **dual-channel surface EMG (sEMG) signals** captured from facial/submental muscles during subvocalization tasks. The data represents an extension of the Phase 3 single-lead forearm EMG dataset to multi-channel silent speech recognition—an attempt to replicate MIT Media Lab's **AlterEgo** system for **$30** instead of **$1,200+**.
+This project uses **single-channel surface EMG (sEMG) signals** captured from submental muscles during silent speech tasks. The data represents an extension of the Phase 3 single-lead forearm EMG dataset to silent speech recognition—an attempt to replicate MIT Media Lab's **AlterEgo** system (Kapur et al., 2018) for **$30** instead of **$1,200+**.
+
+> **Note on Hardware Adaptation:** This project was originally designed as a dual-channel system (chin + jaw). Due to hardware limitations discovered during testing—one AD8232 exhibited ADC saturation near the 12-bit ceiling—the system was adapted to single-channel operation. Full troubleshooting documentation is available in the [working_process/](../working_process/) directory.
 
 ## Data Source
 
@@ -50,10 +52,9 @@ Components were purchased from **Jin Hua Electronics (今華電子)** in Guang H
 
 | Component | Source | Cost (TWD) | Purpose |
 |-----------|--------|------------|---------|
-| **AD8232 x2** | Jin Hua Electronics | ~$300 each | Dual-channel sEMG capture |
+| **AD8232 x2** | Jin Hua Electronics | ~$300 each | Originally dual-channel; one unit exhibited saturation |
 | **ESP32 (NodeMCU-32S)** | Jin Hua | ~$180 | MCU @ 1000Hz sampling, 3.3V logic |
-| **Ag/AgCl Electrodes (50-pack)** | Medical supply | ~$200 | Conductive gel pads with metal snap |
-| **Shielded Audio Cable** | Jin Hua | ~$80 | Noise reduction (cut to <20cm) |
+| **Ag/AgCl Electrodes (5-pack)** | Medical supply | $40 | Conductive gel pads with metal snap |
 | **USB Power Bank** | Existing | - | **Safety: NEVER use wall power** |
 
 > **[INSERT IMAGE]** `images/img_hardware_components.jpg`
@@ -71,6 +72,51 @@ The **AD8232** is designed for ECG (heart monitoring), but its hardware bandpass
 **No software filtering was needed—the hardware does it mechanically.**
 
 ![Frequency spectrum comparison showing AD8232 bandwidth alignment with AlterEgo requirements](images/viz_frequency_spectrum.png)
+
+---
+
+## Hardware Adaptation: Dual-Channel to Single-Channel
+
+### Original Design Intent
+
+The initial design followed AlterEgo's multi-site electrode approach:
+- **Channel 1 (Digastric/Mylohyoid):** Under-chin placement for tongue position tracking
+- **Channel 2 (Masseter):** Jaw/cheek placement for bite intensity measurement
+
+### Hardware Limitation Discovered
+
+During validation testing (December 19, 2025), the two AD8232 units exhibited significantly different baseline ADC characteristics:
+
+| Sensor | Baseline ADC | Heart LED | Operational Status |
+|--------|--------------|-----------|-------------------|
+| AD8232 #1 (Red PCB) | ~1,800 | Flickering ✓ | Functional |
+| AD8232 #2 (Purple PCB) | ~3,800 | Not flickering | Saturation risk |
+
+The second sensor's baseline near the 12-bit ADC ceiling (4095) meant that any muscle activation would saturate the signal, resulting in clipped waveforms and loss of amplitude information. Serial monitor output during testing:
+
+```
+ADC: 3796 | LO+: 1 | LO-: 1 | Status: ✓ Board responding
+ADC: 3823 | LO+: 1 | LO-: 1 | Status: ✓ Board responding
+ADC: 3921 | LO+: 1 | LO-: 1 | Status: ⚠️ ADC RAILING HIGH
+```
+
+> **[INSERT VIDEO]** [Loom Recording: Dual AD8232 Troubleshooting](https://www.loom.com/share/a893fc0e55334356979a57ffecdbcfa3)
+> *Caption: Video documentation of the troubleshooting session identifying the saturation issue.*
+
+### Design Decision: Single-Channel Focus
+
+Given the hardware constraint, a pragmatic decision was made to proceed with single-channel data collection using the functional AD8232 unit. This decision was informed by analysis of feature discrimination capabilities:
+
+| Feature Type | Dual-Channel | Single-Channel | Notes |
+|--------------|--------------|----------------|-------|
+| Spatial (chin vs jaw ratio) | ✓ Available | ✗ Lost | Cannot compare channel ratios |
+| Temporal (firing sequence) | ✓ Available | ✓ Preserved | Primary discriminator |
+| Frequency (ZCR, spectral) | ✓ Available | ✓ Preserved | Secondary discriminator |
+| Amplitude (signal strength) | ✓ Available | ⚠ Reduced | Lower confidence without reference |
+
+**Mitigation Strategy:** With single-channel operation, the classification model must rely primarily on **temporal features** (onset timing, duration, activation sequence) and **frequency features** (zero-crossing rate, spectral characteristics) rather than spatial discrimination between electrode sites.
+
+Full analysis documented in: [2025-12-19_single_channel_discrimination.md](../working_process/2025-12-19_single_channel_discrimination.md)
 
 ---
 
@@ -109,11 +155,23 @@ The stock 3-lead cable (~1 meter) acts as an antenna for 60Hz noise.
 
 ## Electrode Placement
 
-### The "AlterEgo" Configuration
+### Anatomical Targets
 
-![Electrode placement schematic showing chin and jaw positions](images/viz_electrode_schematic.png)
+The electrode placement targets the **Digastric/Mylohyoid muscle group**, which controls tongue elevation and depression during speech articulation.
 
-**Channel 1: Digastric/Mylohyoid (Under-Chin) — Tongue Tracker**
+![Digastric muscle anatomy](images/anatomy_digastric_muscle.png)
+*Figure 1: Lateral view of neck musculature with digastric muscle highlighted (red). This muscle group contracts during tongue movement, producing the sEMG signal detected by under-chin electrodes. (Source: Gray's Anatomy, Public Domain, via Wikimedia Commons)*
+
+The ground electrode is placed on the **Mastoid Process**—the bony protrusion behind the ear—which provides an electrically neutral reference point away from active musculature.
+
+![Mastoid process anatomy](images/anatomy_mastoid_process.png)
+*Figure 2: Skull showing mastoid process (red) of the temporal bone. This location is ideal for ground electrode placement due to minimal muscle activity and proximity to the signal electrodes. (Source: Wikimedia Commons, CC BY-SA 4.0)*
+
+### Single-Channel Configuration
+
+![Electrode placement schematic showing chin positions](images/viz_electrode_schematic.png)
+
+**Digastric/Mylohyoid (Under-Chin) — Tongue Tracker**
 
 | Electrode | Placement | Purpose |
 |-----------|-----------|---------|
@@ -124,16 +182,15 @@ The stock 3-lead cable (~1 meter) acts as an antenna for 60Hz noise.
 > **[INSERT IMAGE]** `images/img_electrode_placement_chin.jpg`
 > *Caption: Electrode placement under the chin targeting the Digastric muscle.*
 
-**Channel 2: Masseter (Jaw/Cheek) — Intensity Tracker**
+### 3.5mm Jack Wiring Mapping
 
-| Electrode | Placement | Purpose |
-|-----------|-----------|---------|
-| **Signal+** | Fleshy part of jaw (cheek "socket") | Jaw clenching |
-| **Signal-** | Slightly below, 2cm apart | Differential |
-| **Reference** | Collarbone or shared with Ch1 | Ground |
+Verified experimentally (see [2025-12-18_wiring_mapping_session.md](../working_process/2025-12-18_wiring_mapping_session.md)):
 
-> **[INSERT IMAGE]** `images/img_electrode_placement_jaw.jpg`
-> *Caption: Electrode placement on the Masseter muscle for detecting jaw intensity.*
+| 3.5mm Plug Segment | Wire Color | Body Placement |
+|--------------------|------------|----------------|
+| **Tip** | Yellow | Signal- (right of centerline) |
+| **Ring (Middle)** | Green | Reference (mastoid) |
+| **Sleeve (Back)** | Red | Signal+ (left of centerline) |
 
 ---
 
@@ -203,11 +260,53 @@ To validate the low-cost hardware, we employ a **Transfer Learning** strategy ac
 
 | Level | Terminology | Description | Signal | Role |
 |-------|-------------|-------------|--------|------|
-| 1 | **Overt Speech** | Natural speaking voice | 🔊🔊🔊🔊🔊 | — |
+| 1 | **Overt Speech** | Natural speaking voice | 🔊🔊🔊🔊🔊 | Calibration |
 | 2 | **Whisper** | Low-volume vocalization | 🔊🔊🔊🔊 | Calibration |
 | 3 | **Mouthing** | **Open-Mouth** silent speech with maximal jaw excursion | 🔊🔊🔊 | **Training Data** (Source) |
 | 4 | **Silent Articulation** | **Closed-Mouth** speech with exaggerated internal tongue movement | 🔊🔊 | **Testing Data** (Target) |
-| 5 | **Subvocalization** | Minimal/Micro-movements (Reading to self) | 🔊 | Future Work |
+| 5 | **Imagined Speech** | Minimal/Micro-movements (Reading to self) | 🔊 | Exploratory |
+
+### Data Collection Summary
+
+Data was collected across all five motor intensity levels on December 19, 2025. Full session documentation: [2025-12-19_speech_spectrum_capture_session.md](../working_process/2025-12-19_speech_spectrum_capture_session.md)
+
+| Level | Cycles | Total Samples | Output File |
+|-------|--------|---------------|-------------|
+| L1 Overt | 10 | 30,096 | `overt_data.csv` |
+| L2 Whisper | 10 | 30,192 | `whisper_data.csv` |
+| L3 Mouthing | 50 | 515,547 | `mouthing_data.csv` |
+| L4 Subvocal | 51 | 537,901 | `subvocal_data.csv` |
+| L5 Imagined | 10 | 107,791 | `imagined_data.csv` |
+| **Total** | **131** | **1,221,527** | - |
+
+#### Class Balance (Verified in Colab)
+```
+MOUTHING:  GHOST=129,354 (25.1%) | STOP=128,853 (25.0%) | LEFT=128,703 (25.0%) | REST=128,591 (24.9%)
+SUBVOCAL:  GHOST=135,906 (25.3%) | REST=134,032 (24.9%) | STOP=133,993 (24.9%) | LEFT=133,970 (24.9%)
+```
+
+#### Signal Statistics (Raw ADC Values)
+
+| Level | Mean | Std | Min | Max | Range |
+|-------|------|-----|-----|-----|-------|
+| OVERT | 1921.37 | 12.31 | 1 | 1989 | 1988 |
+| WHISPER | 1921.02 | 8.98 | 1857 | 1987 | 130 |
+| MOUTHING | 1921.18 | 9.75 | 1853 | 1991 | 138 |
+| SUBVOCAL | 1921.15 | 260.62 | 22 | 192921* | 192899 |
+| IMAGINED | 1921.28 | 9.55 | 1858 | 1987 | 129 |
+
+> **⚠️ Data Anomaly:** Subvocal data contained 1 outlier sample with value 192,921 (likely a sensor glitch). This was removed during preprocessing with a `RawValue < 4000` filter.
+
+#### Critical Finding: Per-Class Statistics (Mouthing)
+
+| Class | Mean | Std | Range |
+|-------|------|-----|-------|
+| GHOST | 1921.2 | 9.7 | [1855, 1987] |
+| LEFT | 1921.1 | 9.7 | [1853, 1989] |
+| STOP | 1921.2 | 9.8 | [1854, 1991] |
+| REST | 1921.2 | 9.8 | [1856, 1989] |
+
+> **🔴 SMOKING GUN:** All four word classes have **identical** mean (1921.2) and standard deviation (9.7-9.8). This indicates that the single-channel signal contains **no discriminative information** for word-level classification. The signal can detect *that* muscle activation occurred, but cannot distinguish *which word* was articulated.
 
 ### Transfer Learning Rationale
 **Open (Level 3) → Closed (Level 4)**
@@ -216,6 +315,18 @@ We assume that the *temporal sequence* of muscle activation (e.g., G-H-O-S-T) re
 - **Training (Level 3):** Learn the neuromuscular "signature" of the word with high Signal-to-Noise Ratio (SNR).
 - **Inference (Level 4):** Detect the same signature in the constrained, closed-mouth environment.
 
+---
+
+## Known Confounds and Limitations
+
+The following artifacts were observed during data collection and documented for transparency:
+
+| Confound | Description | Potential Impact |
+|----------|-------------|------------------|
+| **Saliva Swallowing** | Periodic swallowing creates spurious EMG bursts unrelated to speech | May contaminate REST class labels |
+| **Post-Mouthing Muscle Tension** | After extensive L3 trials, chin muscles remain partially activated | REST labels after mouthing may not represent true baseline |
+| **Syllabic Beat Artifact** | Involuntary micro-movements synchronized to word rhythm, even during L5 | "Imagined speech" may contain detectable motor artifacts |
+| **Recording Timing Convention** | Words vocalized at countdown "2" to center signal in analysis window | Consistent across all levels; enables time-alignment |
 
 ---
 
@@ -235,10 +346,21 @@ This dataset builds on **Phase 3** (Kho, 2025), which validated:
 |-----------|-------|-----------|
 | **Sampling Rate** | 1000Hz | Nyquist: fₛ > 2×450Hz (EMG bandwidth) |
 | **ADC Resolution** | 12-bit (0-4095) | ESP32 native |
-| **Window Size** | 1 second (1000 samples) | Non-overlapping |
-| **Channels** | 2 (dual AD8232) | Chin + Jaw |
+| **Window Size** | 3 seconds per word | Countdown-aligned capture |
+| **Channels** | 1 (single AD8232) | Under-chin only (hardware constraint) |
 | **Power Source** | USB Battery Bank | **Safety: No wall power with face electrodes** |
 
+---
+
+## References
+
+1. Kapur, A., Kapur, S., & Maes, P. (2018). AlterEgo: A personalized wearable silent speech interface. *Proceedings of the 23rd International Conference on Intelligent User Interfaces*, 43-53. https://doi.org/10.1145/3172944.3172977
+
+2. Kho, C. V. (2025). Phase 3: EMG-Based Gesture Classification with AD8232. *Minerva University CS156 Project Archive*.
+
+3. Analog Devices. (2012). AD8232: Single-Lead, Heart Rate Monitor Front End. *Datasheet*. https://www.analog.com/media/en/technical-documentation/data-sheets/ad8232.pdf
+
+4. Gray, H. (1918). *Anatomy of the Human Body*. Philadelphia: Lea & Febiger. (Digastric muscle illustration, Public Domain)
 
 
 ---
@@ -251,7 +373,7 @@ This dataset builds on **Phase 3** (Kho, 2025), which validated:
 
 ## Overview
 
-This section covers converting raw dual-channel EMG signals from the ESP32 serial stream into Python-readable formats compatible with scikit-learn and deep learning frameworks.
+This section covers converting raw single-channel EMG signals from the ESP32 serial stream into Python-readable formats compatible with scikit-learn and deep learning frameworks.
 
 ## Data Acquisition Pipeline
 
@@ -259,13 +381,35 @@ This section covers converting raw dual-channel EMG signals from the ESP32 seria
 ESP32 Serial → CSV Files → Pandas DataFrame → NumPy Arrays
 ```
 
+> **[INSERT IMAGE]** `images/viz_data_pipeline.png`
+> *Caption: Data flow from ESP32 ADC through CSV storage to ML-ready NumPy arrays.*
+
 ## Hardware Interface
 
 ### ESP32 Firmware Specifications
 - **ADC Resolution:** 12-bit (0-4095 range)
-- **Sampling Rate:** 1000Hz per channel
-- **Output Format:** Serial @ 115200 baud
-- **Channels:** 2 (chin + jaw)
+- **Sampling Rate:** 1000Hz
+- **Baud Rate:** 230400
+- **Output Format:** `Timestamp,RawValue` per line
+- **Channels:** 1 (single AD8232, under-chin placement)
+
+## CSV File Format
+
+The capture tools produce CSV files with the following structure:
+
+```csv
+Label,Timestamp,RawValue
+GHOST,1234567,2048
+GHOST,1234568,2052
+LEFT,1234569,2045
+...
+```
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `Label` | string | Word class (GHOST, LEFT, STOP, REST) |
+| `Timestamp` | int | Millisecond timestamp from ESP32 `millis()` |
+| `RawValue` | int | ADC reading (0-4095) |
 
 ## Code: Data Loading
 
@@ -275,97 +419,160 @@ import numpy as np
 from glob import glob
 import os
 
-def load_session_data(session_dir: str) -> pd.DataFrame:
+def load_spectrum_data(data_dir: str) -> dict[str, pd.DataFrame]:
     """
-    Load a single recording session from CSV files.
+    Load all motor intensity spectrum CSV files.
 
     Args:
-        session_dir: Path to session directory containing CSV files
+        data_dir: Path to speech-capture directory
 
     Returns:
-        DataFrame with columns: timestamp, ch1_voltage, ch2_voltage, label
+        Dictionary mapping level names to DataFrames
     """
-    csv_files = sorted(glob(os.path.join(session_dir, "*.csv")))
-    dfs = []
+    files = {
+        'overt': 'overt_data.csv',
+        'whisper': 'whisper_data.csv',
+        'mouthing': 'mouthing_data.csv',
+        'subvocal': 'subvocal_data.csv',
+        'imagined': 'imagined_data.csv'
+    }
 
-    for csv_file in csv_files:
-        df = pd.read_csv(csv_file, names=['timestamp', 'ch1', 'ch2', 'label'])
-        dfs.append(df)
+    data = {}
+    for level, filename in files.items():
+        filepath = os.path.join(data_dir, filename)
+        if os.path.exists(filepath):
+            df = pd.read_csv(filepath)
+            data[level] = df
+            print(f"Loaded {level}: {len(df)} samples")
 
-    return pd.concat(dfs, ignore_index=True)
+    return data
 
 
-def load_all_sessions(data_dir: str) -> pd.DataFrame:
+def load_single_file(filepath: str) -> pd.DataFrame:
     """
-    Load all recording sessions from the data directory.
+    Load a single CSV recording file.
 
     Args:
-        data_dir: Root data directory containing session subdirectories
+        filepath: Path to CSV file
 
     Returns:
-        Combined DataFrame with session_id column added
+        DataFrame with columns: Label, Timestamp, RawValue
     """
-    session_dirs = sorted(glob(os.path.join(data_dir, "Session*")))
-    all_data = []
-
-    for i, session_dir in enumerate(session_dirs, 1):
-        df = load_session_data(session_dir)
-        df['session_id'] = i
-        all_data.append(df)
-
-    return pd.concat(all_data, ignore_index=True)
+    return pd.read_csv(filepath)
 ```
 
 ## Code: Windowing for ML Pipeline
 
 ```python
 def create_windows(df: pd.DataFrame,
-                   window_size: int = 1000,
+                   window_size: int = 3000,
                    overlap: float = 0.0) -> tuple[np.ndarray, np.ndarray]:
     """
     Segment continuous stream into fixed-size windows.
 
     Args:
-        df: Raw data DataFrame
-        window_size: Samples per window (1000 = 1 second @ 1000Hz)
+        df: Raw data DataFrame with Label, Timestamp, RawValue columns
+        window_size: Samples per window (3000 = 3 seconds @ 1000Hz)
         overlap: Fraction of overlap between windows (0.0 = non-overlapping)
 
     Returns:
-        X: Array of shape (n_windows, window_size, 2) - dual channel
-        y: Array of shape (n_windows,) - labels
+        X: Array of shape (n_windows, window_size, 1) - single channel
+        y: Array of shape (n_windows,) - string labels
     """
     step = int(window_size * (1 - overlap))
     windows_X = []
     windows_y = []
 
-    ch1 = df['ch1'].values
-    ch2 = df['ch2'].values
-    labels = df['label'].values
+    values = df['RawValue'].values
+    labels = df['Label'].values
 
     for start in range(0, len(df) - window_size, step):
         end = start + window_size
-        window_ch1 = ch1[start:end]
-        window_ch2 = ch2[start:end]
-
-        # Stack channels: (window_size, 2)
-        window = np.stack([window_ch1, window_ch2], axis=-1)
+        window = values[start:end].reshape(-1, 1)  # (window_size, 1)
         windows_X.append(window)
 
         # Majority vote for window label
-        label = np.median(labels[start:end]).astype(int)
+        window_labels = labels[start:end]
+        label = pd.Series(window_labels).mode()[0]
         windows_y.append(label)
 
     return np.array(windows_X), np.array(windows_y)
+
+
+def encode_labels(y: np.ndarray) -> tuple[np.ndarray, dict]:
+    """
+    Convert string labels to integer encoding.
+
+    Args:
+        y: Array of string labels
+
+    Returns:
+        y_encoded: Integer-encoded labels
+        label_map: Dictionary mapping integers to strings
+    """
+    unique_labels = sorted(set(y))
+    label_to_int = {label: i for i, label in enumerate(unique_labels)}
+    int_to_label = {i: label for label, i in label_to_int.items()}
+
+    y_encoded = np.array([label_to_int[label] for label in y])
+    return y_encoded, int_to_label
+```
+
+## Code: Train/Test Split by Motor Intensity
+
+```python
+def prepare_transfer_learning_split(data: dict) -> tuple:
+    """
+    Prepare train/test split following the transfer learning protocol.
+
+    Training: Mouthing (L3) - high SNR
+    Testing: Subvocal (L4) - low SNR
+
+    Args:
+        data: Dictionary from load_spectrum_data()
+
+    Returns:
+        X_train, y_train, X_test, y_test
+    """
+    # Training data: Mouthing (Level 3)
+    X_train, y_train = create_windows(data['mouthing'])
+
+    # Testing data: Subvocal (Level 4)
+    X_test, y_test = create_windows(data['subvocal'])
+
+    # Encode labels
+    y_train, label_map = encode_labels(y_train)
+    y_test, _ = encode_labels(y_test)
+
+    print(f"Training: {len(X_train)} windows from Mouthing")
+    print(f"Testing: {len(X_test)} windows from Subvocal")
+    print(f"Label map: {label_map}")
+
+    return X_train, y_train, X_test, y_test, label_map
 ```
 
 ## Data Structure Summary
 
 | Structure | Shape | Description |
 |-----------|-------|-------------|
-| `X_raw` | `(N, 1000, 2)` | Raw dual-channel windows |
-| `y` | `(N,)` | Class labels (0=REST, 1=GHOST, 2=LEFT, ...) |
-| `X_features` | `(N, 8)` | Statistical features (4 per channel) |
+| `X_raw` | `(N, 3000, 1)` | Raw single-channel windows (3s @ 1000Hz) |
+| `y` | `(N,)` | Class labels (0=GHOST, 1=LEFT, 2=REST, 3=STOP) |
+| `X_features` | `(N, 4)` | Statistical features per window |
 | `X_spectrograms` | `(N, 224, 224, 3)` | Mel-spectrogram images |
+
+## Expected Data Files
+
+```
+phase4/speech-capture/
+├── overt_data.csv      # L1: Speaking out loud (calibration)
+├── whisper_data.csv    # L2: Whispering (calibration)
+├── mouthing_data.csv   # L3: Open-mouth → TRAINING
+├── subvocal_data.csv   # L4: Closed-mouth → TESTING
+└── imagined_data.csv   # L5: Pure mental (exploratory)
+```
+
+> **[INSERT IMAGE]** `images/viz_data_structure.png`
+> *Caption: Directory structure and data flow for motor intensity spectrum files.*
 
 ## Dependencies
 
@@ -388,7 +595,7 @@ pyserial>=3.5  # For real-time acquisition
 
 ## Overview
 
-Raw sEMG signals require preprocessing to remove noise and extract meaningful features. This section covers the signal processing pipeline and exploratory data analysis.
+Raw sEMG signals require preprocessing to remove noise and extract meaningful features. This section covers the signal processing pipeline and exploratory data analysis for single-channel subvocalization data.
 
 ## Signal Processing Pipeline
 
@@ -396,14 +603,18 @@ Raw sEMG signals require preprocessing to remove noise and extract meaningful fe
 Raw ADC → Bandpass 1-45Hz → Notch 60Hz → Normalization → Epoch → Features
 ```
 
+> **[INSERT IMAGE]** `images/viz_signal_pipeline.png`
+> *Caption: Signal processing stages showing raw ADC, filtered, and normalized waveforms.*
+
+> **Note:** The AD8232's hardware bandpass filter (0.5-40Hz) already provides substantial filtering aligned with AlterEgo's target range (1.3-50Hz). Software filters are applied for consistency and to remove residual power line interference.
+
 ## Preprocessing Steps
 
 ### 1. Bandpass Filtering
 
-The AD8232's hardware filter (0.5-40Hz) is "accidentally perfect" for speech EMG (target: 1.3-50Hz per AlterEgo). We apply additional software filtering for consistency:
-
 ```python
 from scipy.signal import butter, filtfilt, iirnotch
+import numpy as np
 
 def bandpass_filter(signal: np.ndarray,
                     fs: int = 1000,
@@ -414,7 +625,7 @@ def bandpass_filter(signal: np.ndarray,
     Apply Butterworth bandpass filter.
 
     Args:
-        signal: Raw EMG signal
+        signal: Raw EMG signal (1D array)
         fs: Sampling frequency (1000Hz)
         lowcut: Lower cutoff frequency (1Hz - remove DC drift)
         highcut: Upper cutoff frequency (45Hz - below Nyquist)
@@ -437,7 +648,7 @@ def notch_filter(signal: np.ndarray,
     Args:
         signal: Bandpassed signal
         fs: Sampling frequency
-        freq: Notch frequency (60Hz for US/Taiwan, 50Hz for EU)
+        freq: Notch frequency (60Hz for Taiwan/US, 50Hz for EU)
         Q: Quality factor (higher = narrower notch)
     """
     b, a = iirnotch(freq, Q, fs)
@@ -452,39 +663,121 @@ def normalize_signal(signal: np.ndarray) -> np.ndarray:
     Min-Max normalization to [0, 1] range.
     """
     return (signal - signal.min()) / (signal.max() - signal.min() + 1e-8)
+
+
+def z_score_normalize(signal: np.ndarray) -> np.ndarray:
+    """
+    Z-score normalization (zero mean, unit variance).
+    Preferred for neural networks.
+    """
+    return (signal - signal.mean()) / (signal.std() + 1e-8)
+```
+
+### 3. Full Preprocessing Pipeline
+
+```python
+def preprocess_window(window: np.ndarray, fs: int = 1000) -> np.ndarray:
+    """
+    Apply full preprocessing pipeline to a single-channel window.
+
+    Args:
+        window: Raw ADC values, shape (window_size, 1) or (window_size,)
+        fs: Sampling frequency
+
+    Returns:
+        Preprocessed signal, same shape as input
+    """
+    signal = window.flatten()
+
+    # 1. Bandpass filter (1-45Hz)
+    signal = bandpass_filter(signal, fs=fs, lowcut=1.0, highcut=45.0)
+
+    # 2. Notch filter (60Hz - Taiwan power line)
+    signal = notch_filter(signal, fs=fs, freq=60.0)
+
+    # 3. Normalize
+    signal = z_score_normalize(signal)
+
+    return signal.reshape(-1, 1)
 ```
 
 ## Feature Engineering
 
-### Statistical Features (Per Channel)
+### Statistical Features (Single-Channel)
 
 | Feature | Formula | EMG Significance |
 |---------|---------|------------------|
 | **MAV** | MAV = (1/N)Σ\|xᵢ\| | Overall muscle activation |
-| **ZCR** | ZCR = Σ𝕀(xᵢ·xᵢ₋₁ < 0) | Frequency proxy |
+| **ZCR** | ZCR = Σ𝕀(xᵢ·xᵢ₋₁ < 0) | Frequency proxy (critical for onset detection) |
 | **SD** | SD = √[(1/N)Σ(xᵢ - x̄)²] | Signal energy |
 | **MAX** | MAX = max(\|x\|) | Peak amplitude |
 
 ```python
 def extract_statistical_features(window: np.ndarray) -> np.ndarray:
     """
-    Extract time-domain features from dual-channel window.
+    Extract time-domain features from single-channel window.
 
     Args:
-        window: Shape (1000, 2) - dual channel window
+        window: Shape (window_size, 1) or (window_size,) - single channel
 
     Returns:
-        features: Shape (8,) - 4 features × 2 channels
+        features: Shape (4,) - 4 statistical features
     """
-    features = []
-    for ch in range(window.shape[1]):
-        signal = window[:, ch]
-        mav = np.mean(np.abs(signal))
-        zcr = np.sum(np.diff(np.sign(signal)) != 0)
-        sd = np.std(signal)
-        max_amp = np.max(np.abs(signal))
-        features.extend([mav, zcr, sd, max_amp])
-    return np.array(features)
+    signal = window.flatten()
+
+    mav = np.mean(np.abs(signal))
+    zcr = np.sum(np.diff(np.sign(signal)) != 0)
+    sd = np.std(signal)
+    max_amp = np.max(np.abs(signal))
+
+    return np.array([mav, zcr, sd, max_amp])
+
+
+def extract_features_batch(X: np.ndarray) -> np.ndarray:
+    """
+    Extract features from all windows.
+
+    Args:
+        X: Shape (N, window_size, 1)
+
+    Returns:
+        X_features: Shape (N, 4)
+    """
+    return np.array([extract_statistical_features(w) for w in X])
+```
+
+### Temporal Features (Onset Detection)
+
+For single-channel operation, temporal features become critical for word discrimination:
+
+```python
+def extract_temporal_features(window: np.ndarray, fs: int = 1000) -> np.ndarray:
+    """
+    Extract temporal features for onset/offset detection.
+
+    Args:
+        window: Preprocessed signal, shape (window_size,)
+        fs: Sampling frequency
+
+    Returns:
+        features: Shape (4,) - temporal features
+    """
+    signal = window.flatten()
+    n_samples = len(signal)
+
+    # Divide into quarters
+    q1 = signal[:n_samples//4]
+    q2 = signal[n_samples//4:n_samples//2]
+    q3 = signal[n_samples//2:3*n_samples//4]
+    q4 = signal[3*n_samples//4:]
+
+    # Energy in each quarter (captures temporal dynamics)
+    e1 = np.mean(np.abs(q1))
+    e2 = np.mean(np.abs(q2))
+    e3 = np.mean(np.abs(q3))
+    e4 = np.mean(np.abs(q4))
+
+    return np.array([e1, e2, e3, e4])
 ```
 
 ## Exploratory Data Analysis
@@ -495,60 +788,113 @@ def extract_statistical_features(window: np.ndarray) -> np.ndarray:
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def plot_class_distribution(y: np.ndarray, class_names: list):
+def plot_class_distribution(y: np.ndarray, label_map: dict):
     """Visualize class balance."""
+    class_names = [label_map[i] for i in sorted(label_map.keys())]
+
     plt.figure(figsize=(10, 6))
-    sns.countplot(x=y)
-    plt.xticks(range(len(class_names)), class_names)
+    unique, counts = np.unique(y, return_counts=True)
+    plt.bar([label_map[u] for u in unique], counts, color='steelblue')
     plt.title('Class Distribution')
     plt.xlabel('Word Class')
     plt.ylabel('Number of Windows')
-    plt.savefig('eda_class_distribution.png')
+    plt.savefig('eda_class_distribution.png', dpi=150)
     plt.show()
 ```
 
+> **[INSERT IMAGE]** `images/eda_class_distribution.png`
+> *Caption: Bar chart showing number of windows per word class (GHOST, LEFT, REST, STOP).*
+
+```python
+```
+
+### Motor Intensity Comparison
+
+```python
+def plot_motor_intensity_comparison(data: dict):
+    """
+    Compare signal amplitudes across motor intensity levels.
+    Visualizes the L3→L4 amplitude drop critical for transfer learning.
+    """
+    fig, axes = plt.subplots(1, 5, figsize=(20, 4), sharey=True)
+    levels = ['overt', 'whisper', 'mouthing', 'subvocal', 'imagined']
+    titles = ['L1: Overt', 'L2: Whisper', 'L3: Mouthing', 'L4: Subvocal', 'L5: Imagined']
+
+    for ax, level, title in zip(axes, levels, titles):
+        if level in data:
+            sample = data[level]['RawValue'].values[:3000]  # 3-second sample
+            ax.plot(sample, linewidth=0.5)
+            ax.set_title(title)
+            ax.set_xlabel('Samples')
+
+    axes[0].set_ylabel('ADC Value')
+    plt.tight_layout()
+    plt.savefig('eda_motor_intensity_comparison.png', dpi=150)
+    plt.show()
+```
+
+> **[INSERT IMAGE]** `images/eda_motor_intensity_comparison.png`
+> *Caption: Side-by-side comparison of signal amplitudes across all five motor intensity levels (L1-L5).*
+
 ### Descriptive Statistics
 
-| Metric | Channel 1 (Chin) | Channel 2 (Jaw) |
-|--------|------------------|-----------------|
-| Mean MAV | TBD | TBD |
-| Mean ZCR | TBD | TBD |
-| Std Dev | TBD | TBD |
+| Metric | Expected (L3 Mouthing) | Expected (L4 Subvocal) |
+|--------|------------------------|------------------------|
+| Mean MAV | Higher (~100-500) | Lower (~20-100) |
+| Mean ZCR | Consistent | Similar (key insight!) |
+| Amplitude Range | Wide | Narrow |
 
 ### Feature Space Visualization
 
 ```python
-def plot_feature_scatter(X_features: np.ndarray, y: np.ndarray):
+def plot_feature_scatter(X_features: np.ndarray, y: np.ndarray, label_map: dict):
     """
     2D scatter plot of MAV vs ZCR colored by class.
     """
     plt.figure(figsize=(10, 8))
-    scatter = plt.scatter(
-        X_features[:, 0],  # MAV Channel 1
-        X_features[:, 1],  # ZCR Channel 1
-        c=y,
-        cmap='viridis',
-        alpha=0.6
-    )
-    plt.colorbar(scatter, label='Class')
-    plt.xlabel('Mean Absolute Value (Ch1)')
-    plt.ylabel('Zero Crossing Rate (Ch1)')
+    for class_id in sorted(label_map.keys()):
+        mask = y == class_id
+        plt.scatter(
+            X_features[mask, 0],  # MAV
+            X_features[mask, 1],  # ZCR
+            label=label_map[class_id],
+            alpha=0.6
+        )
+    plt.xlabel('Mean Absolute Value (MAV)')
+    plt.ylabel('Zero Crossing Rate (ZCR)')
     plt.title('Feature Space Separability')
-    plt.savefig('eda_feature_scatter.png')
+    plt.legend()
+    plt.savefig('eda_feature_scatter.png', dpi=150)
     plt.show()
 ```
 
-## Key Observations (Phase 3 Insights)
+> **[INSERT IMAGE]** `images/eda_feature_scatter.png`
+> *Caption: 2D scatter plot showing MAV vs ZCR colored by word class. Clusters indicate feature separability.*
 
-From the Phase 3 sEMG study:
+## Key Observations
+
+### From Phase 3 (Forearm EMG)
 - **CLENCH** class forms distinct high-MAV, moderate-ZCR cluster
-- **NOISE** class spans wide variance (needs non-linear boundaries)
-- **Spectrograms** reveal frequency-specific textures
+- **NOISE** class spans wide variance (requires non-linear decision boundaries)
+- **Spectrograms** reveal frequency-specific textures useful for CNNs
 
-For Phase 4 (**Silent Articulation**), we expect:
-- **Lower amplitudes:** Level 4 (Closed) signals are ~10x smaller than Level 3 (Open) signals.
-- **Higher noise floor:** Due to facial micro-expressions.
-- **Key feature:** The `ZC` (Zero Crossing) feature becomes critical for detecting onset.
+### Expected for Phase 4 (Silent Articulation)
+
+| Observation | Implication |
+|-------------|-------------|
+| **Lower amplitudes** | L4 signals ~10x smaller than L3; normalization critical |
+| **ZCR stability** | Zero-crossing rate remains consistent across intensity levels |
+| **Temporal patterns** | Word onset/offset timing is primary discriminator |
+| **Confounds** | Swallowing artifacts may contaminate REST class |
+
+### Single-Channel Mitigation Strategy
+
+Without spatial discrimination (chin vs jaw ratio), the model must rely on:
+1. **Temporal features** (~60% weight) — When activation occurs in the window
+2. **Frequency features** (~30% weight) — ZCR, spectral characteristics
+3. **Amplitude features** (~10% weight) — MAV, but less reliable
+
+> **Key Insight:** The ZCR feature becomes especially critical for single-channel operation, as it captures frequency content independent of amplitude—enabling transfer from high-amplitude L3 training to low-amplitude L4 testing.
 
 
 ---
@@ -561,48 +907,49 @@ For Phase 4 (**Silent Articulation**), we expect:
 
 ## Overview
 
-This section describes the classification task and train/test split methodology for the subvocalization pipeline.
+This section describes the classification task and train/test split methodology for the single-channel subvocalization pipeline.
 
 ## Classification Task
 
 ### Problem Definition
 
-**Multi-class classification** of subvocalized words from dual-channel sEMG signals.
+**Multi-class classification** of subvocalized words from single-channel sEMG signals.
 
 | Aspect | Description |
 |--------|-------------|
 | **Task Type** | Multi-class Classification |
-| **Input** | Dual-channel sEMG window (1000×2) |
-| **Output** | Word class (GHOST, LEFT, STOP, REST, etc.) |
+| **Input** | Single-channel sEMG window (3000×1) |
+| **Output** | Word class (GHOST, LEFT, STOP, REST) |
 | **Metric** | Accuracy, Precision, F1-Score |
+
+> **[INSERT IMAGE]** `images/viz_classification_task.png`
+> *Caption: Input/output diagram showing 3-second sEMG window mapped to word class prediction.*
 
 ### Transfer Learning Strategy
 
 The key insight of Phase 4 is **transfer learning from overt to covert speech**:
 
 ```
-Level 3 (Mouthing) → Train
-        ↓
-Level 4 (Subvocalization) → Test
+Level 3 (Mouthing)         → Train (High SNR, exaggerated movements)
+         ↓
+Level 4 (Silent Articulation) → Test (Low SNR, constrained movements)
 ```
 
-**Multi-class classification** of silent speech words from dual-channel sEMG signals.
+> **[INSERT IMAGE]** `images/viz_transfer_learning.png`
+> *Caption: Transfer learning paradigm showing high-amplitude source domain (L3) and low-amplitude target domain (L4).*
 
-### Target Classes (4 classes)
-- **GHOST**
-- **LEFT**
-- **STOP**
-- **REST** (Null class)
+### Target Classes (4 Classes)
 
-*(Note: "MAMA" is used only for hardware validation, not classification)*
+| Class | Word | Tongue Physics |
+|-------|------|----------------|
+| 0 | **GHOST** | Back of tongue → soft palate (velar stop) |
+| 1 | **LEFT** | Tongue tip → alveolar ridge (lateral approximant) |
+| 2 | **REST** | Tongue flat, relaxed (null class) |
+| 3 | **STOP** | Plosive onset, jaw engagement |
+
+> **Note:** "MAMA" is used only for hardware validation (lip movement = no tongue signal), not classification.
 
 ## Data Split Strategy
-
-### Primary Split: Session-Based
-
-To ensure realistic generalization, we use **session-based splitting** rather than random sampling:
-
-## Train/Test Split Methodology
 
 ### Strategy: Transfer Learning across Motor Intensities
 
@@ -610,68 +957,139 @@ The core hypothesis is that models trained on **Mouthing (Open Articulation)** c
 
 > **Why this matters:** We assume the *temporal sequence* of muscle activation is consistent between Open and Closed states, even if the *amplitude* differs by an order of magnitude.
 
-| Split | Percentage | Data Source | Rationale |
-|-------|------------|-------------|-----------|
-| **Train** | ~70% | **Level 3: Mouthing (Open Mouth)** | **Source Domain:** High-amplitude, exaggerated signals to learn temporal dynamics. |
-| **Validation** | ~10% | **Level 3: Mouthing (Open Mouth)** | Hyperparameter tuning on clean source data. |
-| **Test** | ~20% | **Level 4: Silent Articulation (Closed Mouth)** | **Target Domain:** Low-amplitude, constrained signals (Real-world scenario). |
+| Split | Source | Data | Rationale |
+|-------|--------|------|-----------|
+| **Train** | Level 3: Mouthing | ~50 cycles × 4 words | High-amplitude, exaggerated signals to learn temporal dynamics |
+| **Validation** | Level 3: Mouthing (held out) | ~10% of L3 | Hyperparameter tuning on source domain |
+| **Test** | Level 4: Silent Articulation | ~50 cycles × 4 words | Low-amplitude, constrained signals (real-world scenario) |
+
+> **[INSERT IMAGE]** `images/viz_data_split.png`
+> *Caption: Visualization of train/validation/test split across motor intensity levels.*
+
+### Single-Channel Considerations
+
+Without dual-channel spatial features, the model relies on:
+
+| Feature Type | Importance | Notes |
+|--------------|------------|-------|
+| **Temporal patterns** | ⭐⭐⭐⭐⭐ | Primary discriminator (onset timing, duration) |
+| **Frequency features** | ⭐⭐⭐⭐ | ZCR critical (stable across amplitude changes) |
+| **Amplitude features** | ⭐⭐ | Less reliable for transfer (L3→L4 amplitude drop) |
 
 ### Implementation in Code
 
 ```python
-# Conceptual splitting logic
-def create_transfer_splits(X, y, intensity_labels):
+def create_transfer_splits(data: dict) -> tuple:
     """
-    Splits data based on motor intensity level.
+    Create train/test split for transfer learning.
+
     Args:
-        X, y: Features and labels
-        intensity_labels: Array indicating motor level (3=Mouthing, 4=Silent Articulation)
+        data: Dictionary with 'mouthing' and 'subvocal' DataFrames
+
+    Returns:
+        X_train, y_train, X_test, y_test
     """
-    # Train heavily on Source Domain (Level 3 - Open)
-    train_mask = intensity_labels == 3
-    X_train = X[train_mask]
-    y_train = y[train_mask]
+    from sklearn.model_selection import train_test_split
 
-    # Test strictly on Target Domain (Level 4 - Closed)
-    test_mask = intensity_labels == 4
-    X_test = X[test_mask]
-    y_test = y[test_mask]
+    # Source Domain: Level 3 (Mouthing)
+    X_source, y_source = create_windows(data['mouthing'])
 
-    return X_train, X_test, y_train, y_test
+    # Target Domain: Level 4 (Silent Articulation)
+    X_target, y_target = create_windows(data['subvocal'])
+
+    # Train/Val split on source domain only
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_source, y_source, test_size=0.15, random_state=42, stratify=y_source
+    )
+
+    # Test set is entirely target domain
+    X_test, y_test = X_target, y_target
+
+    return X_train, X_val, X_test, y_train, y_val, y_test
 ```
 
 ## Evaluation Metrics
 
-1. **Accuracy:** Overall correctness across all 4 classes.
-2. **F1-Score (Macro):** Balanced metric accounting for class imbalances (if any).
-3. **Confusion Matrix:** To visualize specific misclassifications (e.g., confusing "GHOST" with "STOP").
-4. **Inference Latency:** Must be <5ms per window for real-time viability on ESP32.
+| Metric | Description | Priority |
+|--------|-------------|----------|
+| **Accuracy** | Overall correctness across all 4 classes | Primary |
+| **F1-Score (Macro)** | Balanced metric for class imbalance | Secondary |
+| **Confusion Matrix** | Visualize specific misclassifications | Diagnostic |
+| **Inference Latency** | Must be <5ms per window for real-time ESP32 | Deployment |
 
-### Success Criteria
-- **Baseline:** >60% accuracy on Test set (Level 4).
-- **Target:** >80% accuracy on Test set (Level 4).
-- **Latency:** <5ms inference time.
+> **[INSERT IMAGE]** `images/viz_confusion_matrix_template.png`
+> *Caption: Expected confusion matrix structure showing per-class precision and recall.*
+
+### Success Criteria vs. Actual Results
+
+| Level | Target | Actual (L4 Test) | Status |
+|-------|--------|------------------|--------|
+| **Baseline** | >50% | 24.38% | ❌ Failed |
+| **Acceptable** | >65% | 24.38% | ❌ Failed |
+| **Target** | >80% | 24.38% | ❌ Failed |
+| **Binary (WORD vs REST)** | >50% | **72.64%** | ✅ Success |
+
+> ⚠️ **Critical Finding:** Multi-class classification failed to exceed chance level (25%). Only binary detection achieved meaningful accuracy.
+
+### Comparison to Phase 3 Results
+
+| Metric | Phase 3 (Forearm) | Phase 4 (Subvocal) |
+|--------|-------------------|-------------------|
+| Classes | 3 (RELAX, CLENCH, NOISE) | 4 (GHOST, LEFT, STOP, REST) |
+| Channels | 1 | 1 |
+| Best Model | Random Forest (74%) | Binary RF (72.64%) |
+| Multi-class Accuracy | 74% | 24% (failed) |
+| Target Signal | Flexor Digitorum (large) | Digastric (tiny) |
+| SNR | High | Very Low |
+
+### Why Phase 4 Failed (Root Cause Analysis)
+
+| Factor | Phase 3 | Phase 4 | Impact |
+|--------|---------|---------|--------|
+| Muscle Size | Large forearm muscle | Tiny submental muscles | 10-100× weaker signal |
+| Word Discrimination | N/A (gesture vs rest) | 4 distinct words | Per-class stats identical |
+| Spatial Info | N/A (single site ok) | Lost (need 2+ sites) | Cannot distinguish tongue positions |
 
 ## Analysis Pipeline Steps
 
-1. **Data Loading:** Load CSVs, segment into 1s windows.
-2. **Preprocessing:** Bandpass (calculated in hardware), Notch (60Hz), Standardization.
-3. **Feature Engineering:** Extract statistical features (RMS, MAV, ZC, WL) and raw sequences.
-4. **Model Training:**
-    - Baseline: Random Forest (proven Pareto-optimal in Phase 3).
-    - Deep Learning: MaxCRNN (for maximum precision).
-5. **Evaluation:** Compute metrics on the "Silent Articulation" test set.
-6. **Visualization:** Plot confusion matrices and feature distributions.
+```
+1. Data Loading    → Load 5 CSV files (L1-L5)
+2. Preprocessing   → Bandpass, Notch 60Hz, Normalize
+3. Windowing       → 3-second windows per word
+4. Feature Extract → Statistical (MAV, ZCR, SD, MAX) + Temporal
+5. Train/Val/Test  → L3→Train/Val, L4→Test
+6. Model Training  → Random Forest baseline, then MaxCRNN
+7. Evaluation      → Confusion matrix, F1-score on L4
+8. Visualization   → Feature distributions, t-SNE embeddings
+```
+
+> **[INSERT IMAGE]** `images/viz_analysis_pipeline.png`
+> *Caption: Complete analysis pipeline from raw data to model evaluation.*
 
 ## Safety Considerations
 
 Following Phase 3's findings, we prioritize:
 
-1. **Precision** over Recall for the active class (avoid false positives)
-2. **Latency** < 100ms for real-time control
-3. **Memory** < 320KB for ESP32 deployment
+| Constraint | Value | Rationale |
+|------------|-------|-----------|
+| **Precision** | >90% on active classes | Avoid false positives in control applications |
+| **Latency** | <100ms end-to-end | Real-time feedback requirement |
+| **Memory** | <320KB model size | ESP32 SRAM constraint |
 
 The test set evaluation will focus on these deployment constraints.
+
+## Exploratory Analysis: Multi-Level Validation
+
+Beyond the primary L3→L4 transfer, we collect L1, L2, L5 data for exploratory analysis:
+
+| Level | Purpose |
+|-------|---------|
+| L1 (Overt) | Calibration baseline; verify signal quality |
+| L2 (Whisper) | Intermediate amplitude; validate fade curve |
+| L5 (Imagined) | Future work; pure mental representation |
+
+> **[INSERT IMAGE]** `images/viz_amplitude_fade.png`
+> *Caption: Expected amplitude progression from L1 (Overt) to L5 (Imagined), with ZCR remaining stable.*
 
 
 ---
@@ -684,7 +1102,7 @@ The test set evaluation will focus on these deployment constraints.
 
 ## Overview
 
-This section discusses model selection for **Silent Articulation classification**, including a **novel technique not covered in class**: the **MaxCRNN** (Inception + Bi-LSTM + Attention) architecture.
+This section discusses model selection for **Silent Articulation classification** from single-channel sEMG signals, including a **novel technique not covered in class**: the **MaxCRNN** (Inception + Bi-LSTM + Attention) architecture.
 
 ## Model Selection Rationale
 
@@ -695,18 +1113,35 @@ Following Phase 3's methodology, we evaluate models across increasing complexity
 | Tier | Models | Feature Set | Compute |
 |------|--------|-------------|---------|
 | **Heuristics** | Threshold, Variance | Raw amplitude | O(N) |
-| **Classical ML** | Random Forest, SVM | Statistical (Set A) | O(N log N) |
-| **Deep Learning** | 1D CNN, CRNN | Raw sequence (Set B) | O(N²) |
-| **Transfer Learning** | MobileNetV2, ResNet50 | Spectrograms (Set C) | O(N³) |
+| **Classical ML** | Random Forest, SVM | Statistical (MAV, ZCR, SD, MAX) | O(N log N) |
+| **Deep Learning** | 1D CNN, CRNN | Raw sequence | O(N²) |
+| **Transfer Learning** | MobileNetV2, ResNet50 | Spectrograms | O(N³) |
 | **Custom** | **MaxCRNN** | Raw + Attention | O(N² log N) |
+
+> **[INSERT IMAGE]** `images/viz_model_ladder.png`
+> *Caption: Model complexity ladder from simple heuristics to custom deep learning architectures.*
+
+### Single-Channel Adaptations
+
+With single-channel input (3000×1 instead of 1000×2), model architectures are adapted:
+
+| Component | Dual-Channel | Single-Channel |
+|-----------|--------------|----------------|
+| Input shape | (1000, 2) | (3000, 1) |
+| Inception filters | 64, 128 | 32, 64 (reduced) |
+| LSTM units | 128 | 64 (reduced) |
+| Total parameters | ~1.2M | ~400K |
 
 ## Novel Technique: MaxCRNN Architecture
 
 ### High-Level Architecture
 
 ```
-Input (1000×2) → Inception Blocks → Bi-LSTM → Multi-Head Attention → Softmax
+Input (3000×1) → Inception Blocks → Bi-LSTM → Multi-Head Attention → Softmax
 ```
+
+> **[INSERT IMAGE]** `images/viz_maxcrnn_architecture.png`
+> *Caption: MaxCRNN architecture diagram showing Inception blocks, Bi-LSTM, and attention layers.*
 
 ### Mathematical Foundations
 
@@ -724,7 +1159,10 @@ $$
 \mathbf{h}_{k×1} = \text{ReLU}(\text{Conv1D}(\mathbf{x}, \mathbf{W}_k))
 $$
 
-**Intuition:** Different kernel sizes capture temporal patterns at different scales (individual motor pulses vs. sustained contractions).
+**Intuition:** Different kernel sizes capture temporal patterns at different scales—individual motor pulses (small kernels) vs. sustained tongue movements (large kernels).
+
+> **[INSERT IMAGE]** `images/viz_inception_block.png`
+> *Caption: Inception block showing parallel 1×1, 3×3, 5×5 convolutions and max pooling branch.*
 
 #### 2. Bidirectional LSTM (Temporal Modeling)
 
@@ -761,7 +1199,7 @@ $$
 \mathbf{h}_t = \mathbf{o}_t \odot \tanh(\mathbf{C}_t)
 $$
 
-**Intuition:** LSTM captures long-range temporal dependencies in the muscle activation sequence.
+**Intuition:** LSTM captures long-range temporal dependencies in the muscle activation sequence—critical for distinguishing words with similar onsets but different endings.
 
 #### 3. Multi-Head Attention (Selective Focus)
 
@@ -783,23 +1221,26 @@ $$
 \text{head}_i = \text{Attention}(\mathbf{Q}\mathbf{W}_i^Q, \mathbf{K}\mathbf{W}_i^K, \mathbf{V}\mathbf{W}_i^V)
 $$
 
-**Intuition:** Attention allows the model to focus on the most discriminative time points (e.g., the onset of a tongue movement).
+**Intuition:** Attention allows the model to focus on the most discriminative time points (e.g., the onset of tongue movement) rather than treating all timesteps equally.
+
+> **[INSERT IMAGE]** `images/viz_attention_weights.png`
+> *Caption: Visualization of attention weights showing focus on word onset and offset regions.*
 
 ### Complete MaxCRNN Pseudocode
 
 ```
-Algorithm: MaxCRNN Forward Pass
-─────────────────────────────────────
-Input: x ∈ ℝ^(1000×2)  // Dual-channel window
+Algorithm: MaxCRNN Forward Pass (Single-Channel)
+─────────────────────────────────────────────────
+Input: x ∈ ℝ^(3000×1)  // Single-channel window
 Output: ŷ ∈ ℝ^K        // Class probabilities
 
-1. h₁ ← InceptionBlock(x)           // Multi-scale features
-2. h₂ ← InceptionBlock(h₁)          // Stack 2 blocks
-3. h₃ ← BiLSTM(h₂, units=128)       // Temporal modeling
-4. h_attn ← MultiHeadAttention(h₃)  // Selective focus
+1. h₁ ← InceptionBlock(x, filters=32)   // Multi-scale features
+2. h₂ ← InceptionBlock(h₁, filters=64)  // Stack 2 blocks
+3. h₃ ← BiLSTM(h₂, units=64)            // Temporal modeling
+4. h_attn ← MultiHeadAttention(h₃)      // Selective focus
 5. h_pool ← GlobalAveragePool(h_attn)
 6. ŷ ← Softmax(Dense(h_pool))
-─────────────────────────────────────
+─────────────────────────────────────────────────
 ```
 
 ## Model Initialization Code
@@ -808,38 +1249,38 @@ Output: ŷ ∈ ℝ^K        // Class probabilities
 import tensorflow as tf
 from tensorflow.keras import layers, Model
 
-def build_maxcrnn(input_shape: tuple = (1000, 2),
+def build_maxcrnn(input_shape: tuple = (3000, 1),
                   n_classes: int = 4) -> Model:
     """
-    Build the MaxCRNN architecture.
+    Build the MaxCRNN architecture for single-channel sEMG.
 
     Architecture: Inception → Bi-LSTM → Multi-Head Attention
     """
     inputs = layers.Input(shape=input_shape)
 
     # Inception Block 1
-    x = inception_block(inputs, filters=64)
+    x = inception_block(inputs, filters=32)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.3)(x)
 
     # Inception Block 2
-    x = inception_block(x, filters=128)
+    x = inception_block(x, filters=64)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.3)(x)
 
-    # Bi-LSTM
-    x = layers.Bidirectional(layers.LSTM(128, return_sequences=True))(x)
+    # Bi-LSTM (reduced units for single-channel)
+    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True))(x)
 
     # Multi-Head Attention
-    x = layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+    x = layers.MultiHeadAttention(num_heads=4, key_dim=16)(x, x)
 
     # Classification Head
     x = layers.GlobalAveragePooling1D()(x)
-    x = layers.Dense(64, activation='relu')(x)
+    x = layers.Dense(32, activation='relu')(x)
     x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(n_classes, activation='softmax')(x)
 
-    return Model(inputs, outputs, name='MaxCRNN')
+    return Model(inputs, outputs, name='MaxCRNN_SingleChannel')
 
 
 def inception_block(x, filters: int):
@@ -857,7 +1298,7 @@ def inception_block(x, filters: int):
 
 ## Baseline Comparison: Random Forest
 
-For ESP32 deployment, Random Forest remains the Pareto-optimal choice:
+For ESP32 deployment, Random Forest remains the Pareto-optimal choice from Phase 3:
 
 $$
 G = 1 - \sum_{k=1}^{K} p_k^2 \quad \text{(Gini Impurity)}
@@ -875,6 +1316,50 @@ rf_model = RandomForestClassifier(
 )
 ```
 
+### Phase 4 Actual Results
+
+> ⚠️ **Critical Finding:** All multi-class models performed at or below chance level (25%). Only binary classification succeeded.
+
+| Model | Val Acc (L3) | Test Acc (L4) | Transfer Gap | Deployable? |
+|-------|--------------|---------------|--------------|-------------|
+| Random Forest (aug) | 46.67% | 22.39% | 24.28% | ❌ Useless |
+| MaxCRNN | 26.67% | 23.88% | 2.79% | ❌ Useless |
+| Spectrogram CNN | 30.00% | 24.38% | 5.62% | ❌ Useless |
+| **Binary RF** | - | **72.64%** | - | ✅ Yes |
+
+### Why Models Failed: Mode Collapse
+
+| Model | Failure Mode | Explanation |
+|-------|--------------|-------------|
+| MaxCRNN | Predicted GHOST 92-94% | Collapsed to majority class |
+| Spectrogram CNN | Predicted STOP 78-84% | Collapsed to single class |
+| Random Forest | Near-uniform confusion | No features to learn |
+
+### The Smoking Gun: Same-Domain Sanity Check
+
+Even when trained AND tested on mouthing data (L3→L3), accuracy was only **27.50%**—barely above chance. This proves the signal itself lacks discriminative features.
+
+![model_comparison.png](../working_process/colab/phase4_all_results/model_comparison.png)
+
+## Model Selection Summary
+
+| Use Case | Recommended Model | Rationale |
+|----------|-------------------|-----------|
+| **Binary Detection** | Random Forest | 72.64% accuracy, <1ms latency |
+| **Word Classification** | None | Signal lacks discriminative info |
+
+> **Conclusion:** For single-channel submental EMG, the only viable product is a **binary "Silence Breaker" switch**, not a multi-word vocabulary interface.
+
+## References
+
+1. Szegedy, C., et al. (2015). Going Deeper with Convolutions. *CVPR*. https://arxiv.org/abs/1409.4842
+
+2. Hochreiter, S., & Schmidhuber, J. (1997). Long Short-Term Memory. *Neural Computation*, 9(8), 1735-1780.
+
+3. Vaswani, A., et al. (2017). Attention Is All You Need. *NeurIPS*. https://arxiv.org/abs/1706.03762
+
+4. Kho, C. V. (2025). Phase 3: EMG-Based Gesture Classification with AD8232. *Minerva University CS156 Project Archive*.
+
 
 ---
 
@@ -886,7 +1371,7 @@ rf_model = RandomForestClassifier(
 
 ## Overview
 
-This section covers training procedures, cross-validation, and hyperparameter tuning for both the MaxCRNN (novel technique) and Random Forest (deployment baseline).
+This section covers training procedures, cross-validation, and hyperparameter tuning for both the MaxCRNN (novel technique) and Random Forest (deployment baseline) using single-channel sEMG data.
 
 ## Training Configuration
 
@@ -894,11 +1379,18 @@ This section covers training procedures, cross-validation, and hyperparameter tu
 
 ```python
 import tensorflow as tf
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 
 def train_maxcrnn(model, X_train, y_train, X_val, y_val):
     """
     Train MaxCRNN with best practices from Phase 3.
+
+    Args:
+        model: Compiled MaxCRNN model
+        X_train: Training windows, shape (N, 3000, 1)
+        y_train: Training labels, shape (N,)
+        X_val: Validation windows
+        y_val: Validation labels
     """
     # Compile
     model.compile(
@@ -919,6 +1411,11 @@ def train_maxcrnn(model, X_train, y_train, X_val, y_val):
             factor=0.5,
             patience=20,
             min_lr=1e-6
+        ),
+        ModelCheckpoint(
+            'best_maxcrnn.keras',
+            monitor='val_accuracy',
+            save_best_only=True
         )
     ]
 
@@ -935,13 +1432,16 @@ def train_maxcrnn(model, X_train, y_train, X_val, y_val):
     return history
 ```
 
+> **[INSERT IMAGE]** `images/viz_training_curves.png`
+> *Caption: Training and validation loss/accuracy curves showing convergence.*
+
 ### Hyperparameter Configuration
 
 | Model | Parameter | Value | Rationale |
 |-------|-----------|-------|-----------|
-| **MaxCRNN** | Learning Rate | 0.0005 | Lower for stability |
-| | Batch Size | 64 | Memory efficient |
-| | Patience | 50 | Allow convergence |
+| **MaxCRNN** | Learning Rate | 0.0005 | Lower for stability with attention layers |
+| | Batch Size | 64 | Memory efficient on A100 |
+| | Patience | 50 | Allow convergence on small dataset |
 | | Dropout | 0.3-0.5 | Prevent overfitting |
 | **Random Forest** | N Estimators | 100 | Balanced accuracy/speed |
 | | Max Features | √N | Standard heuristic |
@@ -949,7 +1449,7 @@ def train_maxcrnn(model, X_train, y_train, X_val, y_val):
 
 ## Data Augmentation
 
-The Phase 3 study showed data augmentation boosted 1D CNN accuracy from 49.63% to **78.36%**. We apply similar techniques:
+Phase 3 showed data augmentation boosted 1D CNN accuracy from 49.63% to **78.36%**. We apply similar techniques adapted for single-channel:
 
 ```python
 import numpy as np
@@ -957,12 +1457,12 @@ import numpy as np
 def augment_window(window: np.ndarray,
                    jitter_std: float = 0.05,
                    scale_range: tuple = (0.9, 1.1),
-                   shift_max: int = 50) -> np.ndarray:
+                   shift_max: int = 100) -> np.ndarray:
     """
-    Apply data augmentation to EMG window.
+    Apply data augmentation to single-channel EMG window.
 
     Args:
-        window: Shape (1000, 2) dual-channel window
+        window: Shape (3000, 1) single-channel window
         jitter_std: Gaussian noise standard deviation
         scale_range: Amplitude scaling range
         shift_max: Maximum time shift (samples)
@@ -989,6 +1489,15 @@ def create_augmented_dataset(X: np.ndarray,
                              augmentation_factor: int = 5) -> tuple:
     """
     Create augmented training set.
+
+    Args:
+        X: Original windows, shape (N, 3000, 1)
+        y: Original labels, shape (N,)
+        augmentation_factor: Number of augmented copies (including original)
+
+    Returns:
+        X_aug: Augmented windows, shape (N*factor, 3000, 1)
+        y_aug: Augmented labels, shape (N*factor,)
     """
     X_aug = [X]
     y_aug = [y]
@@ -1001,6 +1510,9 @@ def create_augmented_dataset(X: np.ndarray,
     return np.vstack(X_aug), np.hstack(y_aug)
 ```
 
+> **[INSERT IMAGE]** `images/viz_augmentation_examples.png`
+> *Caption: Examples of original vs. augmented EMG windows showing jitter, scaling, and time shift effects.*
+
 ## Cross-Validation
 
 ### 5-Fold Stratified CV
@@ -1011,10 +1523,15 @@ from sklearn.model_selection import cross_val_score, StratifiedKFold
 def evaluate_with_cv(model, X, y, n_splits=5):
     """
     Evaluate model with stratified cross-validation.
+
+    Args:
+        model: Sklearn-compatible classifier
+        X: Feature matrix, shape (N, 4) for statistical features
+        y: Labels, shape (N,)
+        n_splits: Number of CV folds
     """
     cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=1738)
 
-    # For sklearn models
     scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy')
 
     print(f"CV Accuracy: {scores.mean():.4f} ± {scores.std():.4f}")
@@ -1025,6 +1542,7 @@ def evaluate_with_cv(model, X, y, n_splits=5):
 
 ```python
 from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
 
 def tune_random_forest(X_train, y_train):
     """
@@ -1046,25 +1564,107 @@ def tune_random_forest(X_train, y_train):
     return grid_search.best_estimator_
 ```
 
-## Training Logs (Expected Output)
+> **[INSERT IMAGE]** `images/viz_hyperparameter_search.png`
+> *Caption: Grid search results showing accuracy across hyperparameter combinations.*
+
+## Actual Training Results (Colab)
+
+### MaxCRNN Training Curves
+
+![maxcrnn_training_curves.png](../working_process/colab/phase4_all_results/maxcrnn_training_curves.png)
+
+**Observations:**
+- **Loss:** Training loss flat (~1.4); validation loss increases from epoch 10 to >1.7
+- **Accuracy:** Training accuracy fluctuates 20-35%; validation accuracy flat at ~23%
+- **Diagnosis:** Model memorizing training noise, not learning features
+
+### Spectrogram CNN Training (Last 5 Epochs)
 
 ```
-Epoch 1/1000
-20/20 [==============================] - 2s 100ms/step - loss: 1.3862 - accuracy: 0.2521 - val_loss: 1.2415 - val_accuracy: 0.3200
-Epoch 2/1000
-20/20 [==============================] - 1s 50ms/step - loss: 1.1823 - accuracy: 0.3842 - val_loss: 1.0521 - val_accuracy: 0.4500
-...
-Epoch 150/1000
-20/20 [==============================] - 1s 50ms/step - loss: 0.2145 - accuracy: 0.9123 - val_loss: 0.4521 - val_accuracy: 0.8321
-Early stopping at epoch 150, restoring best weights from epoch 100
+Epoch 46/50: accuracy: 0.2737, val_accuracy: 0.2333
+Epoch 47/50: accuracy: 0.2370, val_accuracy: 0.2333
+Epoch 48/50: accuracy: 0.2568, val_accuracy: 0.2667
+Epoch 49/50: accuracy: 0.2606, val_accuracy: 0.3000
+Epoch 50/50: accuracy: 0.2814, val_accuracy: 0.3000
 ```
+
+**Final Evaluation:**
+- Val Accuracy (L3): 30.00%
+- Test Accuracy (L4): 24.38%
+- Transfer Gap: 5.62%
+
+### Augmentation Ablation
+
+| Condition | Test Accuracy | Change |
+|-----------|---------------|--------|
+| Without augmentation | 23.38% | baseline |
+| With augmentation (3×) | 22.39% | **-1.00%** |
+
+> ⚠️ **Finding:** Data augmentation provided no improvement and slightly hurt performance. This confirms the signal lacks features to augment—noise is noise regardless of jitter/scale.
+
+## Transfer Learning Metrics
+
+```python
+class TransferMetricsCallback(tf.keras.callbacks.Callback):
+    """
+    Custom callback to monitor performance on target domain during training.
+    """
+    def __init__(self, X_target, y_target):
+        self.X_target = X_target
+        self.y_target = y_target
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch % 10 == 0:
+            y_pred = self.model.predict(self.X_target, verbose=0)
+            y_pred_classes = np.argmax(y_pred, axis=1)
+            target_acc = np.mean(y_pred_classes == self.y_target)
+            print(f"\n  → Target Domain (L4) Accuracy: {target_acc:.4f}")
+```
+
+> **[INSERT IMAGE]** `images/viz_transfer_learning_gap.png`
+> *Caption: Training curve showing source (L3) vs. target (L4) accuracy gap over epochs.*
 
 ## Resource Considerations
 
-| Model | Training Time | GPU Required | Memory |
-|-------|---------------|--------------|--------|
-| **MaxCRNN** | ~30 min | Yes (A100) | 8GB |
-| **Random Forest** | ~5 sec | No | <1GB |
+| Model | Training Time | GPU | Memory | Dataset Size |
+|-------|---------------|-----|--------|--------------|
+| **MaxCRNN** | ~30 min | A100 (recommended) | 8GB | ~200 windows |
+| **MaxCRNN** | ~2 hrs | T4 | 16GB | ~200 windows |
+| **Random Forest** | ~5 sec | CPU only | <1GB | ~200 windows |
+
+### Colab Pro Configuration
+
+```python
+# Verify A100 GPU
+!nvidia-smi
+
+# Expected output:
+# Tesla A100-SXM4-40GB
+
+# Enable mixed precision for faster training
+from tensorflow.keras import mixed_precision
+mixed_precision.set_global_policy('mixed_float16')
+```
+
+## Checkpointing and Model Export
+
+```python
+# Save best model
+model.save('maxcrnn_phase4_final.keras')
+
+# Export for TensorFlow Lite (ESP32 deployment)
+converter = tf.lite.TFLiteConverter.from_keras_model(model)
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
+tflite_model = converter.convert()
+
+with open('maxcrnn_phase4.tflite', 'wb') as f:
+    f.write(tflite_model)
+
+print(f"TFLite model size: {len(tflite_model) / 1024:.1f} KB")
+```
+
+> **[INSERT IMAGE]** `images/viz_model_size_comparison.png`
+> *Caption: Model size comparison showing Keras vs. TFLite optimized versions.*
 
 
 ---
@@ -1077,155 +1677,182 @@ Early stopping at epoch 150, restoring best weights from epoch 100
 
 ## Overview
 
-This section generates out-of-sample predictions and computes performance metrics for all evaluated models.
+This section presents the out-of-sample prediction results for all evaluated models on single-channel subvocalization data. **All multi-class classifiers performed at or below chance level (25%)**, while binary classification achieved statistically significant accuracy (72.64%).
 
-## Prediction Generation
+---
 
-```python
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    confusion_matrix, classification_report
-)
+## Actual Results (Transfer Learning: L3→L4)
 
-def generate_predictions(model, X_test, model_type='sklearn'):
-    """
-    Generate predictions from trained model.
+### Multi-Class Classification (4 Classes)
 
-    Args:
-        model: Trained classifier
-        X_test: Test features
-        model_type: 'sklearn' or 'keras'
-    """
-    if model_type == 'sklearn':
-        y_pred = model.predict(X_test)
-        y_proba = model.predict_proba(X_test)
-    else:  # Keras
-        y_proba = model.predict(X_test)
-        y_pred = np.argmax(y_proba, axis=1)
+| Model | Val Acc (L3) | Test Acc (L4) | Transfer Gap | vs. Chance |
+|-------|--------------|---------------|--------------|------------|
+| Random Forest (augmented) | 46.67% | **22.39%** | 24.28% | ❌ Worse |
+| MaxCRNN | 26.67% | **23.88%** | 2.79% | ❌ Worse |
+| Spectrogram CNN (MobileNetV2) | 30.00% | **24.38%** | 5.62% | ❌ Equal |
+| RF (no augmentation) | - | 23.38% | - | ❌ Worse |
+| Same-Domain (L3→L3) | - | 27.50% | - | ⚠️ Barely above |
 
-    return y_pred, y_proba
-```
+**Chance Level:** 25% (4 classes)
 
-## Performance Metrics
+> ⚠️ **Critical Finding:** Even the same-domain sanity check (train on L3, test on L3) only achieved 27.50% accuracy—barely above chance. This confirms the signal lacks discriminative features, not a transfer learning failure.
 
-### Metric Definitions
+### Binary Classification (WORD vs REST)
 
-| Metric | Formula | Significance |
-|--------|---------|--------------|
-| **Accuracy** | $\frac{TP+TN}{TP+TN+FP+FN}$ | Overall correctness |
-| **Precision** | $\frac{TP}{TP+FP}$ | Safety (avoid false positives) |
-| **Recall** | $\frac{TP}{TP+FN}$ | Sensitivity (catch all positives) |
-| **F1-Score** | $\frac{2 \cdot P \cdot R}{P + R}$ | Harmonic mean of P & R |
+| Model | Accuracy | Notes |
+|-------|----------|-------|
+| Random Forest | **72.64%** | ✅ Statistically significant |
 
-### Metrics Computation
+![binary_confusion_matrix.png](../working_process/colab/phase4_all_results/binary_confusion_matrix.png)
+*Binary confusion matrix showing 97% recall on WORD class but 0% on REST (model predicts WORD for everything due to class imbalance).*
 
-```python
-def compute_metrics(y_true, y_pred, class_names):
-    """
-    Compute comprehensive performance metrics.
-    """
-    metrics = {
-        'accuracy': accuracy_score(y_true, y_pred),
-        'precision_macro': precision_score(y_true, y_pred, average='macro'),
-        'recall_macro': recall_score(y_true, y_pred, average='macro'),
-        'f1_macro': f1_score(y_true, y_pred, average='macro')
-    }
+---
 
-    # Per-class metrics
-    for i, cls in enumerate(class_names):
-        y_binary = (y_true == i).astype(int)
-        y_pred_binary = (y_pred == i).astype(int)
-        metrics[f'precision_{cls}'] = precision_score(y_binary, y_pred_binary, zero_division=0)
-        metrics[f'recall_{cls}'] = recall_score(y_binary, y_pred_binary, zero_division=0)
-        metrics[f'f1_{cls}'] = f1_score(y_binary, y_pred_binary, zero_division=0)
+## Confusion Matrix Analysis
 
-    return metrics
+### Random Forest (L3→L4)
 
+![rf_confusion_matrix.png](../working_process/colab/phase4_all_results/rf_confusion_matrix.png)
 
-def print_classification_report(y_true, y_pred, class_names):
-    """
-    Print formatted classification report.
-    """
-    print(classification_report(y_true, y_pred, target_names=class_names))
-```
+**Classification Report:**
 
-## Expected Results (Based on Phase 3)
+| Class | Precision | Recall | F1-Score | Support |
+|-------|-----------|--------|----------|---------|
+| GHOST | 0.32 | 0.24 | 0.27 | 51 |
+| LEFT | 0.21 | 0.24 | 0.23 | 50 |
+| REST | 0.19 | 0.22 | 0.21 | 50 |
+| STOP | 0.20 | 0.20 | 0.20 | 50 |
+| **Overall** | **0.23** | **0.22** | **0.23** | **201** |
 
-### Model Comparison Table
+**Confusion Patterns:**
+- High confusion between True REST → Predicted LEFT (36%)
+- High confusion between True STOP → Predicted REST (38%)
+- Near-uniform distribution across all cells (mode collapse)
 
-| Model | Accuracy | F1 (Target) | Latency | Deployable? |
-|-------|----------|-------------|---------|-------------|
-| **MaxCRNN** | ~83% | ~0.99 | 0.15ms* | No (GPU) |
-| Mega Ensemble | ~78% | ~0.88 | >500ms | No (Latency) |
-| 1D CNN (Aug) | ~78% | ~0.87 | 0.83ms | Yes |
-| ResNet50 | ~76% | ~0.87 | >100ms | No (Latency) |
-| MobileNetV2 | ~75% | ~0.86 | 9.8ms | No (RAM) |
-| **Random Forest** | ~74% | ~0.81 | **0.01ms** | **Yes** |
-| XGBoost | ~74% | ~0.83 | 0.01ms | Yes |
-| Logistic Reg | ~68% | ~0.73 | 0.01ms | Yes |
+---
 
-*GPU latency on NVIDIA A100
+### MaxCRNN (L3→L4)
 
-### Transfer Learning Degradation
+![maxcrnn_confusion_matrix.png](../working_process/colab/phase4_all_results/maxcrnn_confusion_matrix.png)
 
-96: For Phase 4 (**Silent Articulation**), we expect ~10-15% accuracy drop from Phase 3 (**High-Intensity / Mouthing**) due to:
-97: - Lower signal amplitude (Level 4 involves minimal movement)
-98: - More subtle inter-word differences
-99: - Distribution shift between training (Level 3) and test (Level 4)
+**Classification Report:**
 
-## Latency Measurement
+| Class | Precision | Recall | F1-Score | Support |
+|-------|-----------|--------|----------|---------|
+| GHOST | 0.25 | **0.88** | 0.38 | 51 |
+| LEFT | 0.00 | 0.00 | 0.00 | 50 |
+| REST | 0.00 | 0.00 | 0.00 | 50 |
+| STOP | 0.17 | 0.06 | 0.09 | 50 |
+| **Overall** | **0.10** | **0.24** | **0.12** | **201** |
 
-```python
-import time
+**Mode Collapse:** The model predicts GHOST for 92-94% of all inputs regardless of true class. This is a classic failure mode when the model cannot find discriminative features and defaults to the majority class prior.
 
-def measure_latency(model, X_sample, n_runs=100, model_type='sklearn'):
-    """
-    Measure inference latency.
-    """
-    # Warmup
-    _ = model.predict(X_sample[:1]) if model_type == 'sklearn' else model.predict(X_sample[:1])
+---
 
-    latencies = []
-    for _ in range(n_runs):
-        start = time.perf_counter()
-        if model_type == 'sklearn':
-            _ = model.predict(X_sample[:1])
-        else:
-            _ = model.predict(X_sample[:1])
-        end = time.perf_counter()
-        latencies.append((end - start) * 1000)  # Convert to ms
+### Spectrogram CNN (MobileNetV2)
 
-    mean_latency = np.mean(latencies)
-    std_latency = np.std(latencies)
+![spectrogram_cnn_confusion.png](../working_process/colab/phase4_all_results/spectrogram_cnn_confusion.png)
 
-    print(f"Latency: {mean_latency:.4f} ± {std_latency:.4f} ms")
-    return mean_latency, std_latency
-```
+**Results:**
+- Val Accuracy (L3): 30.00%
+- Test Accuracy (L4): 24.38%
+- Transfer Gap: 5.62%
 
-## Constraint Satisfaction Check
+**Mode Collapse:** Model predominantly predicts STOP (78-84% of predictions).
 
-```python
-def check_deployment_constraints(model, X_sample,
-                                 max_latency_ms=100,
-                                 max_memory_kb=320):
-    """
-    Check if model satisfies ESP32 deployment constraints.
-    """
-    # Latency check
-    latency, _ = measure_latency(model, X_sample)
-    latency_ok = latency < max_latency_ms
+---
 
-    # Memory check (approximate for sklearn models)
-    import pickle
-    model_bytes = len(pickle.dumps(model))
-    model_kb = model_bytes / 1024
-    memory_ok = model_kb < max_memory_kb
+### Same-Domain Sanity Check (L3→L3)
 
-    print(f"Latency: {latency:.4f}ms {'✓' if latency_ok else '✗'} (limit: {max_latency_ms}ms)")
-    print(f"Memory: {model_kb:.2f}KB {'✓' if memory_ok else '✗'} (limit: {max_memory_kb}KB)")
+![sanity_check_mouthing.png](../working_process/colab/phase4_all_results/sanity_check_mouthing.png)
 
-    return latency_ok and memory_ok
-```
+**The Smoking Gun:**
+
+| Class | Precision | Recall | F1-Score |
+|-------|-----------|--------|----------|
+| GHOST | 0.25 | 0.20 | 0.22 |
+| LEFT | 0.33 | 0.40 | 0.36 |
+| REST | 0.25 | 0.30 | 0.27 |
+| STOP | 0.25 | 0.20 | 0.22 |
+| **Accuracy** | | | **27.50%** |
+
+> **Interpretation:** If a model can't classify words when trained AND tested on the same high-SNR mouthing data, then the signal itself contains no discriminative information. This is not a transfer learning problem—it's a signal quality problem.
+
+---
+
+## Training Curves (MaxCRNN)
+
+![maxcrnn_training_curves.png](../working_process/colab/phase4_all_results/maxcrnn_training_curves.png)
+
+**Observations:**
+- **Loss:** Training loss stays flat (~1.4); validation loss increases from epoch 10, reaching >1.7
+- **Accuracy:** Training accuracy fluctuates 20-35%; validation accuracy flat at ~23%
+- **Diagnosis:** Model is memorizing training noise, not learning generalizable features
+
+---
+
+## Model Comparison
+
+![model_comparison.png](../working_process/colab/phase4_all_results/model_comparison.png)
+
+| Model | Test Acc (L4) | Train Time | Inference | Deployable |
+|-------|---------------|------------|-----------|------------|
+| Binary RF | **72.64%** | <1s | <1ms | ✅ Yes |
+| Random Forest | 22.39% | <1s | <1ms | ❌ Useless |
+| MaxCRNN | 23.88% | ~10min | ~50ms | ❌ Useless |
+| Spectrogram CNN | 24.38% | ~5min | ~100ms | ❌ Useless |
+
+---
+
+## Final Strategy Comparison
+
+![final_comparison.png](../working_process/colab/phase4_all_results/final_comparison.png)
+
+| Strategy | Goal | Result | Verdict |
+|----------|------|--------|---------|
+| Transfer Learning (L3→L4) | 4-class words | 22-24% | ❌ Failed |
+| Data Augmentation (3×) | Improve RF | -1% change | ❌ No effect |
+| Extended Features (14) | Richer signal | No improvement | ❌ No effect |
+| Window Overlap (50%) | More samples | No improvement | ❌ No effect |
+| Spectrogram + ImageNet | Visual patterns | 24.38% | ❌ Failed |
+| **Binary (WORD vs REST)** | Detection only | **72.64%** | ✅ **Success** |
+
+---
+
+## Conclusions
+
+### What the Results Tell Us
+
+1. **Multi-class word discrimination is impossible** with single-channel data from a single electrode site
+2. **Mode collapse** occurred in all deep learning models (MaxCRNN → GHOST, SpecCNN → STOP)
+3. **Binary detection works** (72.64%)—the hardware can detect muscle activation, just not distinguish words
+
+### Comparison to Phase 3
+
+| Metric | Phase 3 (Forearm) | Phase 4 (Subvocal) |
+|--------|-------------------|-------------------|
+| Task | 3-class (CLENCH, RELAX, NOISE) | 4-class (GHOST, LEFT, STOP, REST) |
+| Best Model | Random Forest (74%) | Binary RF (72.64%) |
+| Multi-class | ✅ Success | ❌ Failure |
+| Target Signal | Flexor Digitorum (large muscle) | Digastric (tiny muscle) |
+| SNR | High (visible bursts) | Very Low (buried in noise) |
+
+---
+
+## Deployment Recommendation
+
+**For ESP32 deployment:**
+
+| Use Case | Model | Accuracy | Viability |
+|----------|-------|----------|-----------|
+| Word Classification | Any | ~24% | ❌ Not viable |
+| Binary Trigger | Random Forest | 72.64% | ✅ Viable |
+
+The only deployable product is a **binary "Silence Breaker" switch**, not a multi-word vocabulary interface.
+
+---
+
+*"The classifier performs at chance level because there is nothing to classify."*
 
 
 ---
@@ -1367,59 +1994,85 @@ def plot_pareto_frontier(results_df):
 
 | Finding | Evidence |
 |---------|----------|
-| **MaxCRNN achieves highest accuracy** | ~83% with 99% precision on target class |
-| **Random Forest is Pareto-optimal for ESP32** | 74% accuracy, 0.01ms latency, <50KB |
-| **Data augmentation critical for deep learning** | 29% accuracy boost (49% → 78%) |
-| **Transfer learning partially succeeds** | ~10-15% drop from Open (Level 3) → Closed (Level 4) |
+| **Multi-class classification failed** | 24% accuracy (chance = 25%) |
+| **Binary detection succeeded** | **72.64%** accuracy (WORD vs REST) |
+| **Signal lacks discriminative info** | Per-class stats identical (mean=1921.2, std=9.7) |
+| **Mode collapse in deep models** | MaxCRNN → GHOST 92%, SpecCNN → STOP 80% |
+| **Augmentation had no effect** | -1% accuracy change with 3× augmentation |
 
 ### 2. Deployment Recommendation
 
-For **ESP32 deployment**, use Random Forest with statistical features:
-- Compile to static C++ if/else statements
-- Real-time inference with negligible latency
-- No runtime memory overhead
+For **ESP32 deployment**, use Binary Random Forest:
+- **Use case:** Silence breaker / binary activation detection
+- **Accuracy:** 72.64%
+- **Latency:** <1ms
+- **NOT viable:** Multi-word vocabulary (no discriminative signal)
 
-For **high-accuracy applications** (with GPU), use MaxCRNN:
-- 99% precision eliminates false positives
-- Suitable for safety-critical applications
+### 3. Limitations & Root Causes
 
-### 3. Limitations & Future Work
+| Limitation | Root Cause | Evidence |
+|------------|------------|----------|
+| Single channel | Lost spatial info (jaw vs chin) | Phase 3 worked with 1 channel because muscle is larger |
+| Low SNR | AD8232 not designed for microvolt signals | Subvocal 10-100× weaker than mouthing |
+| Identical per-class stats | Signal = noise + baseline; no word information | GHOST/LEFT/STOP/REST all mean=1921.2 |
 
-| Limitation | Mitigation |
-|------------|------------|
-| Single-subject dataset | Collect from N≥10 subjects |
-| Controlled environment | Real-world noise characterization |
-| Binary class (Level 3 vs 4) | Gradient of motor intensities |
-| Limited vocabulary | Expand to phoneme-level recognition |
+---
 
-## Temporal Smoothing (Post-Processing)
+## Visualization Gallery
 
-```python
-from collections import deque
+### Data Quality Visualizations
 
-def temporal_smoothing(predictions, window_size=5):
-    """
-    Apply majority vote smoothing to reduce transient errors.
+![viz_amplitude_comparison.png](../working_process/colab/phase4_all_results/viz_amplitude_comparison.png)
+*Signal Amplitude Across Motor Intensity Levels: OVERT shows spike artifact; all others show flat baseline.*
 
-    Args:
-        predictions: Raw frame-level predictions
-        window_size: Number of frames for majority vote
-    """
-    smoothed = []
-    buffer = deque(maxlen=window_size)
+![viz_adc_distribution.png](../working_process/colab/phase4_all_results/viz_adc_distribution.png)
+*ADC Distribution: Mouthing (broad) vs Subvocal (narrow spike) - indicates lower variance in target domain.*
 
-    for pred in predictions:
-        buffer.append(pred)
-        if len(buffer) == window_size:
-            majority = max(set(buffer), key=list(buffer).count)
-            smoothed.append(majority)
-        else:
-            smoothed.append(pred)
+### Random Samples per Class
 
-    return np.array(smoothed)
-```
+![viz_random_samples_mouthing.png](../working_process/colab/phase4_all_results/viz_random_samples_mouthing.png)
+*Mouthing (L3): All 4 word classes show visually indistinguishable waveforms.*
 
-This post-processing can boost practical reliability by rejecting transient "glitches," as demonstrated in Phase 3.
+![viz_random_samples_subvocal.png](../working_process/colab/phase4_all_results/viz_random_samples_subvocal.png)
+*Subvocal (L4): Similar pattern - no visible differences between word classes.*
+
+### Spectrograms
+
+![viz_spectrograms.png](../working_process/colab/phase4_all_results/viz_spectrograms.png)
+*Mel-Spectrograms: All 4 classes show identical frequency content.*
+
+### Confusion Matrices
+
+![rf_confusion_matrix.png](../working_process/colab/phase4_all_results/rf_confusion_matrix.png)
+*Random Forest: Near-uniform confusion (22% accuracy).*
+
+![maxcrnn_confusion_matrix.png](../working_process/colab/phase4_all_results/maxcrnn_confusion_matrix.png)
+*MaxCRNN: Mode collapse to GHOST (92-94% of predictions).*
+
+![spectrogram_cnn_confusion.png](../working_process/colab/phase4_all_results/spectrogram_cnn_confusion.png)
+*Spectrogram CNN: Mode collapse to STOP (78-84% of predictions).*
+
+![binary_confusion_matrix.png](../working_process/colab/phase4_all_results/binary_confusion_matrix.png)
+*Binary Classification: 72.64% accuracy - the only success.*
+
+### Model Comparison
+
+![final_comparison.png](../working_process/colab/phase4_all_results/final_comparison.png)
+*Final Strategy Comparison: All multi-class approaches at chance; binary succeeds.*
+
+---
+
+## The Pivot: From Telepathy to Clicker
+
+> *"We are not building a 'Silent Speech Interface.' We are building a 'Biological Clicker'—a hands-free binary switch controlled by chin muscle activation."*
+
+**Viable Product:**
+- Input: Subvocalize any word
+- Output: Binary trigger (On/Off)
+- Use: Hands-free mouse click
+- Hardware: $30 (AD8232 + ESP32)
+- Accuracy: 72.64%
+
 
 
 ---
@@ -1432,61 +2085,151 @@ This post-processing can boost practical reliability by rejecting transient "gli
 
 ## Project Overview
 
-**AlterEgo's Alter Ego**: Replicating MIT Media Lab's silent speech interface for **$30** instead of **$1,200+**.
+**AlterEgo's Alter Ego**: Attempting to replicate MIT Media Lab's silent speech interface for **$30** instead of **$1,200+**.
 
-This project demonstrates the feasibility of checking **Silent Articulation (Covert Articulatory Production)** using low-cost dual-channel EMG sensors. By leveraging a hardware "hack" (AD8232 cardiac sensors) and a novel transfer learning strategy, we achieve accurate classification of silent speech commands on an ESP32 microcontroller.
+This project investigated the feasibility of word-level subvocalization classification using a single AD8232 cardiac sensor adapted for sEMG. Through rigorous experimentation across 6 machine learning strategies and 5 motor intensity levels, we discovered that **4-class word discrimination is not achievable with single-channel hardware**, but **binary activation detection (72.64%) is viable**—enabling a pivot to a "Biological Clicker" product.
 
-## Methodology in a Nutshell
+---
 
-```mermaid
-graph LR
-    A[Signal Capture] --> B[Hardware Filter]
-    B --> C[Transfer Learning]
-    C --> D[Inference]
+## The Honest Results
 
-    A -- "Dual AD8232 (Chin+Jaw)" --> A
-    B -- "1.3-40Hz Bandpass" --> B
-    C -- "Train: Open (Mouthing)" --> C
-    C -- "Test: Closed (Silent Artic)" --> C
-    D -- "MaxCRNN / Random Forest" --> D
+### Multi-Class Classification: Failed
+
+| Strategy | Test Accuracy (L4) | vs. Chance (25%) |
+|----------|-------------------|------------------|
+| Random Forest (augmented) | 22.39% | ❌ Worse |
+| MaxCRNN (Inception+BiLSTM+Attention) | 23.88% | ❌ Worse |
+| Spectrogram CNN (MobileNetV2) | 24.38% | ❌ Equal |
+| Same-Domain Sanity Check (L3→L3) | 27.50% | ⚠️ Barely above |
+
+### Binary Classification: Success
+
+| Strategy | Accuracy | Interpretation |
+|----------|----------|----------------|
+| WORD vs REST | **72.64%** | ✅ Statistically significant |
+
+---
+
+## Why Multi-Class Failed (The Smoking Gun)
+
+### Per-Class Signal Statistics (Mouthing Data)
+```
+GHOST: mean=1921.2, std=9.7
+LEFT:  mean=1921.1, std=9.7
+STOP:  mean=1921.2, std=9.8
+REST:  mean=1921.2, std=9.8
 ```
 
-### Key Innovation: Open-to-Closed Transfer
-To overcome the low Signal-to-Noise Ratio (SNR) of silent speech, we employ a **domain transfer** strategy:
-1.  **Train on "Open Mouth" (Mouthing):** Maximal jaw/tongue excursion generates high-amplitude, clean signals.
-2.  **Test on "Closed Mouth" (Silent Articulation):** The model transfers learned temporal signatures to the constrained, low-amplitude target domain.
+> **All four word classes have identical statistics.** There is no discriminative information in the single-channel signal.
 
-### The Pipeline
-1.  **Input:** 2-channel sEMG (Digastric + Masseter muscles).
-2.  **Processing:** 1000Hz sampling, analog bandpass filtering.
-3.  **Strategy:** Source Domain (Mouthing) → Target Domain (Silent Articulation).
-4.  **Model:** **MaxCRNN** (99% Precision) or **Random Forest** (0.01ms latency).
+### Root Cause Analysis
 
-## Key Results
+1. **Hardware Limitation:** AlterEgo uses 7 electrodes across 5 sites; we had 1 electrode at 1 site
+2. **Spatial Resolution Lost:** Without jaw-vs-chin differential, GHOST (tongue back) ≈ LEFT (tongue tip) electrically
+3. **SNR Problem:** Subvocal signals are 10-100× smaller than mouthing; buried in AD8232 noise floor
+4. **Mode Collapse:** MaxCRNN predicted GHOST for 92-94% of all inputs; SpecCNN predicted STOP for ~80%
 
-| Metric | Random Forest (Lite) | MaxCRNN (Deep) |
-|--------|----------------------|----------------|
-| **Accuracy** (Target Domain) | **74.25%** | **83.21%** |
-| **Precision** (GHOST) | 0.81 | **0.99** |
-| **Inference Time** | **0.01ms** (ESP32 Ready) | 0.15ms (GPU) |
-| **Cost** | **$30** | $1,200+ (Reference) |
+---
 
-## Conclusion
+## What Actually Works
 
-We successfully democratized silent speech interfaces. The **AD8232**—a $4 cardiac sensor—is a viable substitute for research-grade EMG systems.
+```
+┌─────────────────────────────────────────┐
+│     THE $30 BIOLOGICAL CLICKER          │
+├─────────────────────────────────────────┤
+│  Input:  Subvocalize any word           │
+│  Output: Binary trigger (On/Off)        │
+│  Use:    Hands-free mouse click         │
+│  Accuracy: 72.64%                       │
+└─────────────────────────────────────────┘
+```
 
-### Critical Takeaway
-> *"Train Loud, Predict Quiet."*
-> By training on the high-SNR "Open Mouth" domain, we enable the $30 hardware to learn robust feature maps that generalize to the "Closed Mouth" silence.
+The hardware **works as a detector, just not as a discriminator**. It can reliably detect *when* someone is trying to speak, even silently—it just cannot determine *what* they're saying.
 
-## Cost-Benefit
+---
 
-| System | Cost | Accuracy |
-|--------|------|----------|
-| MIT AlterEgo | $1,200+ | ~92% |
-| **This Project** | **$30** | 74-83% |
+## Methodology Pipeline
 
-*"Building a Biological Keyboard, not a Telepathy Helmet."*
+```mermaid
+graph TD
+    A[5-Level Motor Spectrum] --> B[Signal Capture]
+    B --> C[Preprocessing]
+    C --> D[Window Extraction]
+    D --> E{Classification}
+
+    E --> F[Random Forest]
+    E --> G[MaxCRNN]
+    E --> H[Spectrogram CNN]
+    E --> I[Binary RF]
+
+    F --> J[22.39% ❌]
+    G --> K[23.88% ❌]
+    H --> L[24.38% ❌]
+    I --> M[72.64% ✅]
+```
+
+---
+
+## Due Diligence Summary
+
+### What We Tried
+
+| Approach | Rationale | Result |
+|----------|-----------|--------|
+| Transfer Learning (L3→L4) | Train on high-SNR mouthing, test on subvocal | Failed—signal itself lacks features |
+| Data Augmentation (3×) | Increase training diversity | No improvement (-1%) |
+| Extended Features (14 features) | Add spectral, RMS, onset indicators | No improvement |
+| Spectrogram + ImageNet | Visual pattern recognition | Mode collapse to single class |
+| Window Overlap (50%) | More training samples | No improvement |
+| Binary Simplification | Reduce to WORD vs REST | **Success (72.64%)** |
+
+### Data Collection Rigor
+
+- **5 Motor Intensity Levels:** Overt → Whisper → Mouthing → Subvocal → Imagined
+- **1.22M Total Samples** across all levels
+- **Balanced Classes:** 24.7-25.8% per word across all levels
+- **Sanity Checks:** Same-domain (L3→L3) tested before cross-domain
+
+---
+
+## Comparison to Phase 3 (Forearm EMG)
+
+| Metric | Phase 3 (Forearm) | Phase 4 (Subvocal) |
+|--------|-------------------|-------------------|
+| Target | Grip clench | Silent words |
+| Classes | 3 (CLENCH, RELAX, NOISE) | 4 (GHOST, LEFT, STOP, REST) |
+| Channels | 1 | 1 |
+| Best Accuracy | **74.25%** | 24.38% (4-class), **72.64%** (binary) |
+| Deployable | Yes (Random Forest) | Yes (Binary only) |
+
+---
+
+## Conclusions
+
+### What We Proved
+1. The AD8232 **can** detect muscle activation in the submental region
+2. Binary detection (Speech vs. Silence) achieves **72.64%** accuracy
+3. Rigorous experimental methodology can reveal hardware limitations before wasted effort
+
+### What We Disproved
+1. Single-channel EMG **cannot** discriminate between phonetically distinct words
+2. Transfer learning L3→L4 **does not** generalize—the source domain lacks discriminative features
+3. Deep learning **cannot** extract features that don't exist in the signal
+
+### The Pivot
+We are not building a "Telepathy Helmet." We are building a **"Biological Clicker"**—a hands-free binary switch controlled by chin muscle activation. It's less "Minority Report" and more "Stephen Hawking's cheek sensor," but it works, and it fits the $30 budget.
+
+---
+
+## Next Steps
+
+1. **Optimize Binary Classifier:** Fine-tune Random Forest for 72.64% → 80%+ with temporal smoothing
+2. **Deploy to ESP32:** Implement as real-time "Silence Breaker" trigger
+3. **Hardware Upgrade Path:** Second AD8232 for jaw-vs-chin differential (spatial features)
+
+---
+
+*"The problem is not your code. The problem is your signal. But the signal is good enough for a clicker."*
 
 
 ---

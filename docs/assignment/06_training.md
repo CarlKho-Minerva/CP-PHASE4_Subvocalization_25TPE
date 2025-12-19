@@ -198,22 +198,42 @@ def tune_random_forest(X_train, y_train):
 > **[INSERT IMAGE]** `images/viz_hyperparameter_search.png`
 > *Caption: Grid search results showing accuracy across hyperparameter combinations.*
 
-## Training Logs (Expected Output)
+## Actual Training Results (Colab)
+
+### MaxCRNN Training Curves
+
+![maxcrnn_training_curves.png](../working_process/colab/phase4_all_results/maxcrnn_training_curves.png)
+
+**Observations:**
+- **Loss:** Training loss flat (~1.4); validation loss increases from epoch 10 to >1.7
+- **Accuracy:** Training accuracy fluctuates 20-35%; validation accuracy flat at ~23%
+- **Diagnosis:** Model memorizing training noise, not learning features
+
+### Spectrogram CNN Training (Last 5 Epochs)
 
 ```
-Epoch 1/1000
-20/20 [==============================] - 2s 100ms/step - loss: 1.3862 - accuracy: 0.2521 - val_loss: 1.2415 - val_accuracy: 0.3200
-Epoch 2/1000
-20/20 [==============================] - 1s 50ms/step - loss: 1.1823 - accuracy: 0.3842 - val_loss: 1.0521 - val_accuracy: 0.4500
-...
-Epoch 150/1000
-20/20 [==============================] - 1s 50ms/step - loss: 0.2145 - accuracy: 0.9123 - val_loss: 0.4521 - val_accuracy: 0.8321
-Early stopping at epoch 150, restoring best weights from epoch 100
+Epoch 46/50: accuracy: 0.2737, val_accuracy: 0.2333
+Epoch 47/50: accuracy: 0.2370, val_accuracy: 0.2333
+Epoch 48/50: accuracy: 0.2568, val_accuracy: 0.2667
+Epoch 49/50: accuracy: 0.2606, val_accuracy: 0.3000
+Epoch 50/50: accuracy: 0.2814, val_accuracy: 0.3000
 ```
+
+**Final Evaluation:**
+- Val Accuracy (L3): 30.00%
+- Test Accuracy (L4): 24.38%
+- Transfer Gap: 5.62%
+
+### Augmentation Ablation
+
+| Condition | Test Accuracy | Change |
+|-----------|---------------|--------|
+| Without augmentation | 23.38% | baseline |
+| With augmentation (3×) | 22.39% | **-1.00%** |
+
+> ⚠️ **Finding:** Data augmentation provided no improvement and slightly hurt performance. This confirms the signal lacks features to augment—noise is noise regardless of jitter/scale.
 
 ## Transfer Learning Metrics
-
-During training, we monitor both source domain (L3) and target domain (L4) performance:
 
 ```python
 class TransferMetricsCallback(tf.keras.callbacks.Callback):

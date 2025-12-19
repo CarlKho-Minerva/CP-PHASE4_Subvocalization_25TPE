@@ -242,13 +242,43 @@ To validate the low-cost hardware, we employ a **Transfer Learning** strategy ac
 
 Data was collected across all five motor intensity levels on December 19, 2025. Full session documentation: [2025-12-19_speech_spectrum_capture_session.md](../working_process/2025-12-19_speech_spectrum_capture_session.md)
 
-| Level | Cycles Completed | Vocabulary | Output File |
-|-------|------------------|------------|-------------|
-| L1 Overt | 10 | GHOST, LEFT, STOP, REST | `overt_data.csv` |
-| L2 Whisper | 10 | GHOST, LEFT, STOP, REST | `whisper_data.csv` |
-| L3 Mouthing | 50 | GHOST, LEFT, STOP, REST | `mouthing_data.csv` |
-| L4 Subvocal | 51 | GHOST, LEFT, STOP, REST | `subvocal_data.csv` |
-| L5 Imagined | 10 | GHOST, LEFT, STOP, REST | `imagined_data.csv` |
+| Level | Cycles | Total Samples | Output File |
+|-------|--------|---------------|-------------|
+| L1 Overt | 10 | 30,096 | `overt_data.csv` |
+| L2 Whisper | 10 | 30,192 | `whisper_data.csv` |
+| L3 Mouthing | 50 | 515,547 | `mouthing_data.csv` |
+| L4 Subvocal | 51 | 537,901 | `subvocal_data.csv` |
+| L5 Imagined | 10 | 107,791 | `imagined_data.csv` |
+| **Total** | **131** | **1,221,527** | - |
+
+#### Class Balance (Verified in Colab)
+```
+MOUTHING:  GHOST=129,354 (25.1%) | STOP=128,853 (25.0%) | LEFT=128,703 (25.0%) | REST=128,591 (24.9%)
+SUBVOCAL:  GHOST=135,906 (25.3%) | REST=134,032 (24.9%) | STOP=133,993 (24.9%) | LEFT=133,970 (24.9%)
+```
+
+#### Signal Statistics (Raw ADC Values)
+
+| Level | Mean | Std | Min | Max | Range |
+|-------|------|-----|-----|-----|-------|
+| OVERT | 1921.37 | 12.31 | 1 | 1989 | 1988 |
+| WHISPER | 1921.02 | 8.98 | 1857 | 1987 | 130 |
+| MOUTHING | 1921.18 | 9.75 | 1853 | 1991 | 138 |
+| SUBVOCAL | 1921.15 | 260.62 | 22 | 192921* | 192899 |
+| IMAGINED | 1921.28 | 9.55 | 1858 | 1987 | 129 |
+
+> **⚠️ Data Anomaly:** Subvocal data contained 1 outlier sample with value 192,921 (likely a sensor glitch). This was removed during preprocessing with a `RawValue < 4000` filter.
+
+#### Critical Finding: Per-Class Statistics (Mouthing)
+
+| Class | Mean | Std | Range |
+|-------|------|-----|-------|
+| GHOST | 1921.2 | 9.7 | [1855, 1987] |
+| LEFT | 1921.1 | 9.7 | [1853, 1989] |
+| STOP | 1921.2 | 9.8 | [1854, 1991] |
+| REST | 1921.2 | 9.8 | [1856, 1989] |
+
+> **🔴 SMOKING GUN:** All four word classes have **identical** mean (1921.2) and standard deviation (9.7-9.8). This indicates that the single-channel signal contains **no discriminative information** for word-level classification. The signal can detect *that* muscle activation occurred, but cannot distinguish *which word* was articulated.
 
 ### Transfer Learning Rationale
 **Open (Level 3) → Closed (Level 4)**

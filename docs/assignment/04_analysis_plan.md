@@ -115,22 +115,35 @@ def create_transfer_splits(data: dict) -> tuple:
 > **[INSERT IMAGE]** `images/viz_confusion_matrix_template.png`
 > *Caption: Expected confusion matrix structure showing per-class precision and recall.*
 
-### Success Criteria
+### Success Criteria vs. Actual Results
 
-| Level | Accuracy (L4 Test) | Interpretation |
-|-------|-------------------|----------------|
-| **Baseline** | >50% | Better than random (4 classes = 25%) |
-| **Acceptable** | >65% | Useful for assistive applications |
-| **Target** | >80% | Comparable to Phase 3 forearm results |
+| Level | Target | Actual (L4 Test) | Status |
+|-------|--------|------------------|--------|
+| **Baseline** | >50% | 24.38% | ❌ Failed |
+| **Acceptable** | >65% | 24.38% | ❌ Failed |
+| **Target** | >80% | 24.38% | ❌ Failed |
+| **Binary (WORD vs REST)** | >50% | **72.64%** | ✅ Success |
 
-### Comparison to Phase 3 Baseline
+> ⚠️ **Critical Finding:** Multi-class classification failed to exceed chance level (25%). Only binary detection achieved meaningful accuracy.
 
-| Metric | Phase 3 (Forearm) | Phase 4 Target |
-|--------|-------------------|----------------|
+### Comparison to Phase 3 Results
+
+| Metric | Phase 3 (Forearm) | Phase 4 (Subvocal) |
+|--------|-------------------|-------------------|
 | Classes | 3 (RELAX, CLENCH, NOISE) | 4 (GHOST, LEFT, STOP, REST) |
 | Channels | 1 | 1 |
-| Best Model | Random Forest (74%) | TBD |
-| Precision | MaxCRNN (99% on critical class) | TBD |
+| Best Model | Random Forest (74%) | Binary RF (72.64%) |
+| Multi-class Accuracy | 74% | 24% (failed) |
+| Target Signal | Flexor Digitorum (large) | Digastric (tiny) |
+| SNR | High | Very Low |
+
+### Why Phase 4 Failed (Root Cause Analysis)
+
+| Factor | Phase 3 | Phase 4 | Impact |
+|--------|---------|---------|--------|
+| Muscle Size | Large forearm muscle | Tiny submental muscles | 10-100× weaker signal |
+| Word Discrimination | N/A (gesture vs rest) | 4 distinct words | Per-class stats identical |
+| Spatial Info | N/A (single site ok) | Lost (need 2+ sites) | Cannot distinguish tongue positions |
 
 ## Analysis Pipeline Steps
 

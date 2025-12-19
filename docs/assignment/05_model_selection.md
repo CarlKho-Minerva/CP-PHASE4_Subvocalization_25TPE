@@ -216,28 +216,39 @@ rf_model = RandomForestClassifier(
 )
 ```
 
-### Phase 3 Benchmark Results
+### Phase 4 Actual Results
 
-| Model | Accuracy | Precision | Inference (ms) | Memory (KB) |
-|-------|----------|-----------|----------------|-------------|
-| Random Forest | 74% | 76% | 0.01 | <50 |
-| MaxCRNN | TBD | 99%* | 50-100 | ~400 |
+> ⚠️ **Critical Finding:** All multi-class models performed at or below chance level (25%). Only binary classification succeeded.
 
-*Phase 3 MaxCRNN achieved 99% precision on safety-critical class (CLENCH).
+| Model | Val Acc (L3) | Test Acc (L4) | Transfer Gap | Deployable? |
+|-------|--------------|---------------|--------------|-------------|
+| Random Forest (aug) | 46.67% | 22.39% | 24.28% | ❌ Useless |
+| MaxCRNN | 26.67% | 23.88% | 2.79% | ❌ Useless |
+| Spectrogram CNN | 30.00% | 24.38% | 5.62% | ❌ Useless |
+| **Binary RF** | - | **72.64%** | - | ✅ Yes |
 
-> **[INSERT IMAGE]** `images/viz_model_comparison.png`
-> *Caption: Pareto frontier showing accuracy vs. inference time for all evaluated models.*
+### Why Models Failed: Mode Collapse
+
+| Model | Failure Mode | Explanation |
+|-------|--------------|-------------|
+| MaxCRNN | Predicted GHOST 92-94% | Collapsed to majority class |
+| Spectrogram CNN | Predicted STOP 78-84% | Collapsed to single class |
+| Random Forest | Near-uniform confusion | No features to learn |
+
+### The Smoking Gun: Same-Domain Sanity Check
+
+Even when trained AND tested on mouthing data (L3→L3), accuracy was only **27.50%**—barely above chance. This proves the signal itself lacks discriminative features.
+
+![model_comparison.png](../working_process/colab/phase4_all_results/model_comparison.png)
 
 ## Model Selection Summary
 
 | Use Case | Recommended Model | Rationale |
 |----------|-------------------|-----------|
-| **ESP32 Deployment** | Random Forest | Low latency, small memory footprint |
-| **Maximum Precision** | MaxCRNN | Attention-based onset detection |
-| **Quick Baseline** | SVM (RBF) | Fast training, interpretable |
+| **Binary Detection** | Random Forest | 72.64% accuracy, <1ms latency |
+| **Word Classification** | None | Signal lacks discriminative info |
 
-> **[INSERT IMAGE]** `images/viz_pareto_frontier.png`
-> *Caption: Pareto frontier plot showing trade-off between accuracy and computational cost.*
+> **Conclusion:** For single-channel submental EMG, the only viable product is a **binary "Silence Breaker" switch**, not a multi-word vocabulary interface.
 
 ## References
 
