@@ -10,9 +10,6 @@ This section covers converting raw single-channel EMG signals from the ESP32 ser
 ESP32 Serial → CSV Files → Pandas DataFrame → NumPy Arrays
 ```
 
-> **[INSERT IMAGE]** `images/viz_data_pipeline.png`
-> *Caption: Data flow from ESP32 ADC through CSV storage to ML-ready NumPy arrays.*
-
 ## Hardware Interface
 
 ### ESP32 Firmware Specifications
@@ -200,8 +197,26 @@ phase4/speech-capture/
 └── imagined_data.csv   # L5: Pure mental (exploratory)
 ```
 
-> **[INSERT IMAGE]** `images/viz_data_structure.png`
-> *Caption: Directory structure and data flow for motor intensity spectrum files.*
+### Actual Data Counts (from Colab)
+
+| File | Samples | Duration | Windows |
+|------|---------|----------|---------|
+| `overt_data.csv` | 30,096 | ~30s | 10 |
+| `whisper_data.csv` | 30,192 | ~30s | 10 |
+| `mouthing_data.csv` | 515,547 | ~515s | **200** |
+| `subvocal_data.csv` | 537,901 | ~538s | **201** |
+| `imagined_data.csv` | 107,791 | ~108s | 36 |
+| **Total** | **1,221,527** | **~20 min** | **457** |
+
+### Window Creation Output
+
+```
+Creating windows (extracting MIDDLE 1-second where word was spoken)...
+📊 Mouthing (L3 - Training): (200, 1000, 1)
+📊 Subvocal (L4 - Testing): (201, 1000, 1)
+```
+
+> **Key Detail:** Windows are 1-second (1000 samples) extracted from the MIDDLE of each 3-second block (samples 1000-2000), capturing the moment when the word was vocalized at countdown "2".
 
 ## Dependencies
 

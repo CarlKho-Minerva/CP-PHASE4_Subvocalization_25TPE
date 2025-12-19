@@ -38,7 +38,7 @@
 
 ### Phase 3 Prior Work
 
-14. **Kho, C. V. L. (2025).** "Pareto-Optimal Model Selection for Low-Cost, Single-Lead EMG Control in Embedded Systems." *arXiv preprint*. [GitHub](https://github.com/CarlKho-Minerva/v2-emg-muscle)
+14. **Kho, C. V. L. (2025).** "Pareto-Optimal Model Selection for Low-Cost, Single-Lead EMG Control in Embedded Systems." [GitHub](https://github.com/CarlKho-Minerva/v2-emg-muscle)
 
 ## Code Repositories
 
@@ -49,6 +49,18 @@
 
 ## Datasets
 
-- **Phase 3 EMG Dataset:** Custom single-subject forearm EMG (1.54M data points)
-- **Phase 4 Dataset:** Dual-channel Silent Articulation EMG (Level 3/4) (in progress)
-- **Awesome Public Datasets:** https://github.com/awesomedata/awesome-public-datasets
+- **Phase 4 Dataset:** Single-channel Silent Articulation sEMG
+  - **Total samples:** 1,221,527
+  - **Training (L3 Mouthing):** 515,547 samples → 200 windows
+  - **Testing (L4 Subvocal):** 537,901 samples → 201 windows
+  - **Colab Notebook:** [Google Colab](https://colab.research.google.com/drive/1gs-ES2spTU45gKnunJ4CoxcrCUpRzlxG)
+
+## Key Findings Summary
+
+| Metric | Phase 3 (Forearm) | Phase 4 (Subvocal) |
+|--------|-------------------|-------------------|
+| Best Multi-class | 74% (RF) | 24% (failed) |
+| Binary Attempt | - | 72.64% (mode collapse) |
+| Conclusion | Viable | **Not viable** |
+
+**AI Statement**: I have used Gemini 3.0 Pro and Claude Opus 4.5 (Thinking) via the Antigravity IDE to speed up the process of data collection and analysis. All interpretations and high-level decisions/analysis are done by me.

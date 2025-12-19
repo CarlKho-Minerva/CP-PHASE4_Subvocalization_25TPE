@@ -2,9 +2,9 @@
 
 ## Dataset Overview
 
-This project uses **single-channel surface EMG (sEMG) signals** captured from submental muscles during silent speech tasks. The data represents an extension of the Phase 3 single-lead forearm EMG dataset to silent speech recognition—an attempt to replicate MIT Media Lab's **AlterEgo** system (Kapur et al., 2018) for **$30** instead of **$1,200+**.
+This project uses **single-channel surface EMG (sEMG) signals** captured from submental muscles during silent speech tasks. The data represents an extension of the Phase 3 single-lead forearm EMG dataset to silent speech recognition. An attempt to replicate MIT Media Lab's **AlterEgo** system (Kapur et al., 2018) for **$30** instead of **$1,200+**.
 
-> **Note on Hardware Adaptation:** This project was originally designed as a dual-channel system (chin + jaw). Due to hardware limitations discovered during testing—one AD8232 exhibited ADC saturation near the 12-bit ceiling—the system was adapted to single-channel operation. Full troubleshooting documentation is available in the [working_process/](../working_process/) directory.
+> **Note on Hardware Adaptation:** This project was originally designed as a dual-channel system (chin + jaw). Due to hardware limitations discovered during testing—one AD8232 exhibited ADC saturation near the 12-bit ceiling and Carl flew away from his electronics supplier. Thus, the system was adapted to single-channel operation. Full troubleshooting documentation is available in the [working_process/](https://github.com/CarlKho-Minerva/CP-PHASE4_Subvocalization_25TPE/tree/main/docs/working_process) directory.
 
 ## Data Source
 
@@ -24,12 +24,12 @@ Components were purchased from **Jin Hua Electronics (今華電子)** in Guang H
 
 | Component | Source | Cost (TWD) | Purpose |
 |-----------|--------|------------|---------|
-| **AD8232 x2** | Jin Hua Electronics | ~$300 each | Originally dual-channel; one unit exhibited saturation |
+| **AD8232 x2** | Jin Hua Electronics | ~$300 each for a set (includes gold-plated jack and three Ag/AgCl Electrodes) | Originally dual-channel; one unit exhibited saturation |
 | **ESP32 (NodeMCU-32S)** | Jin Hua | ~$180 | MCU @ 1000Hz sampling, 3.3V logic |
 | **Ag/AgCl Electrodes (5-pack)** | Medical supply | $40 | Conductive gel pads with metal snap |
-| **USB Power Bank** | Existing | - | **Safety: NEVER use wall power** |
+| **USB Power Bank** | Existing (Macbook) | - | **Safety: NEVER use wall power** |
 
-> **[INSERT IMAGE]** `images/img_hardware_components.jpg`
+![alt text](image.png)
 > *Caption: Full hardware stack including AD8232 sensors, ESP32, and custom cables.*
 
 ### The "Accidental Hardware Match"
@@ -41,13 +41,9 @@ The **AD8232** is designed for ECG (heart monitoring), but its hardware bandpass
 | MIT AlterEgo | 1.3Hz – 50Hz | ✓ |
 | AD8232 Native | 0.5Hz – 40Hz | Hardware match! |
 
-**No software filtering was needed—the hardware does it mechanically.**
-
-![Frequency spectrum comparison showing AD8232 bandwidth alignment with AlterEgo requirements](images/viz_frequency_spectrum.png)
-
 ---
 
-## Hardware Adaptation: Dual-Channel to Single-Channel
+## The Problem
 
 ### Original Design Intent
 
@@ -61,7 +57,7 @@ During validation testing (December 19, 2025), the two AD8232 units exhibited si
 
 | Sensor | Baseline ADC | Heart LED | Operational Status |
 |--------|--------------|-----------|-------------------|
-| AD8232 #1 (Red PCB) | ~1,800 | Flickering ✓ | Functional |
+| AD8232 #1 (Red PCB) | ~1,800 | Flickering | Functional |
 | AD8232 #2 (Purple PCB) | ~3,800 | Not flickering | Saturation risk |
 
 The second sensor's baseline near the 12-bit ADC ceiling (4095) meant that any muscle activation would saturate the signal, resulting in clipped waveforms and loss of amplitude information. Serial monitor output during testing:
@@ -72,58 +68,29 @@ ADC: 3823 | LO+: 1 | LO-: 1 | Status: ✓ Board responding
 ADC: 3921 | LO+: 1 | LO-: 1 | Status: ⚠️ ADC RAILING HIGH
 ```
 
-> **[INSERT VIDEO]** [Loom Recording: Dual AD8232 Troubleshooting](https://www.loom.com/share/a893fc0e55334356979a57ffecdbcfa3)
+<div>
+    <a href="https://www.loom.com/share/a893fc0e55334356979a57ffecdbcfa3">
+      <p>PHASE 4 SOMACH - 2nd AD8232 Broken (there's hope) - Watch Video</p>
+    </a>
+    <a href="https://www.loom.com/share/a893fc0e55334356979a57ffecdbcfa3">
+      <img style="max-width:300px;" src="https://cdn.loom.com/sessions/thumbnails/a893fc0e55334356979a57ffecdbcfa3-c7eead79137547ac-full-play.gif#t=0.1">
+    </a>
+  </div>
+
 > *Caption: Video documentation of the troubleshooting session identifying the saturation issue.*
 
-### Design Decision: Single-Channel Focus
+### The Pivot
 
-Given the hardware constraint, a pragmatic decision was made to proceed with single-channel data collection using the functional AD8232 unit. This decision was informed by analysis of feature discrimination capabilities:
+Given the hardware constraint, a decision was made to proceed with single-channel data collection using the functional AD8232 unit. This decision was informed by analysis of feature discrimination capabilities:
 
 | Feature Type | Dual-Channel | Single-Channel | Notes |
 |--------------|--------------|----------------|-------|
-| Spatial (chin vs jaw ratio) | ✓ Available | ✗ Lost | Cannot compare channel ratios |
-| Temporal (firing sequence) | ✓ Available | ✓ Preserved | Primary discriminator |
-| Frequency (ZCR, spectral) | ✓ Available | ✓ Preserved | Secondary discriminator |
-| Amplitude (signal strength) | ✓ Available | ⚠ Reduced | Lower confidence without reference |
+| Spatial (chin vs jaw ratio) | Available | Lost | Cannot compare channel ratios |
+| Temporal (firing sequence) | Available | Preserved | Primary discriminator |
+| Frequency (ZCR, spectral) | Available | Preserved | Secondary discriminator |
+| Amplitude (signal strength) | Available | Reduced | Lower confidence without reference |
 
 **Mitigation Strategy:** With single-channel operation, the classification model must rely primarily on **temporal features** (onset timing, duration, activation sequence) and **frequency features** (zero-crossing rate, spectral characteristics) rather than spatial discrimination between electrode sites.
-
-Full analysis documented in: [2025-12-19_single_channel_discrimination.md](../working_process/2025-12-19_single_channel_discrimination.md)
-
----
-
-## Critical Hardware Fixes
-
-### 1. The SDN Pin Fix (Discovered in Phase 3)
-
-> **⚠️ CRITICAL:** The AD8232's Shutdown (SDN) pin floats on generic clones, causing massive signal instability.
-
-**Solution:** Wire SDN to 3.3V (HIGH) directly on the ESP32.
-
-```
-ESP32    →    AD8232
-3.3V     →    3.3V
-GND      →    GND
-3.3V     →    SDN (CRITICAL FIX!)
-GPIO34   →    OUTPUT
-```
-
-> **[INSERT IMAGE]** `images/img_wiring_sdn_fix.jpg`
-> *Caption: Close-up of the SDN pin jumping to 3.3V to prevent signal floating.*
-
-### 2. Cable Shielding (Noise Reduction)
-
-The stock 3-lead cable (~1 meter) acts as an antenna for 60Hz noise.
-
-**The Fix:**
-1. **Cut cable to <20cm** (face-to-board distance)
-2. **Twisted Pair:** Twist Signal+ and Signal- wires together (maximizes CMRR)
-3. Or use **shielded microphone cable**
-
-> **[INSERT IMAGE]** `images/img_shielded_cable_cut.jpg`
-> *Caption: Modified short-length shielded cable to minimize uptake of 60Hz mains hum.*
-
----
 
 ## Electrode Placement
 
@@ -151,7 +118,7 @@ The ground electrode is placed on the **Mastoid Process**—the bony protrusion 
 | **Signal- (Yellow)** | Under-chin, right of centerline, 2-3cm apart | Differential signal |
 | **Reference (Green)** | Mastoid process (behind ear) | Electrically neutral ground |
 
-> **[INSERT IMAGE]** `images/img_electrode_placement_chin.jpg`
+![alt text](image-1.png)
 > *Caption: Electrode placement under the chin targeting the Digastric muscle.*
 
 ### 3.5mm Jack Wiring Mapping
@@ -175,28 +142,19 @@ To ensure signal integrity before data collection, a 3-step "Parking Lot Test" w
 - **Success Criteria:** Clean, rhythmic QRS complex (heartbeat) every ~1s.
 - **Purpose:** Verifies sensor and ADC functionality.
 
-> **[INSERT IMAGE]** `images/img_serial_plotter_heartbeat.png`
-> *Caption: Clean ECG signal confirming sensor health.*
-
 **Step 2: Jaw Clench Noise Check**
 - Electrodes on Jaw. Bite down hard.
 - **Success Criteria:** Signal "explodes" into high-amplitude chaos (>2000 units).
 - **Purpose:** Verifies electrodes are making contact and amplifier isn't saturated.
-
-> **[INSERT IMAGE]** `images/img_serial_plotter_jaw_clench.png`
-> *Caption: High-amplitude EMG burst during forceful jaw clench.*
 
 **Step 3: Subvocalization "Wiggle"**
 - Electrodes on Chin. Say "GHOST" internally.
 - **Success Criteria:** Small but distinct disturbance from baseline noise.
 - **Purpose:** Confirms detection of fine motor units in the tongue.
 
-> **[INSERT IMAGE]** `images/img_serial_plotter_subvocal.png`
-> *Caption: The "Wiggle" — subtle but distinct EMG signature of the subvocalized word "GHOST".*
-
 ---
 
-## Vocabulary Selection: "Tongue Gymnastics"
+## Vocabulary Selection
 
 Words were chosen based on **distinct neuromuscular signatures**, not semantic meaning.
 
@@ -204,15 +162,15 @@ Words were chosen based on **distinct neuromuscular signatures**, not semantic m
 
 > *"You are building a Biological Keyboard, not a Telepathy Helmet."*
 
-Since electrodes are under the chin, we're tracking **tongue position**, not sound. Choose words that force the tongue to do radically different things.
+Since electrodes are under the chin, I'm tracking **tongue position**, not sound. Choose words that force the tongue to do radically different things.
 
 ### Tier 1: High Success Rate
 
 | Word | Tongue Physics | Expected Signal |
 |------|----------------|-----------------|
-| **GHOST** | Back of tongue → soft palate ("G" slam) | ⭐⭐⭐⭐⭐ High-frequency burst |
-| **LEFT** | Tongue tip → alveolar ridge ("L" touch) | ⭐⭐⭐⭐ Distinct onset |
-| **STOP** | Plosive "ST" + "P" = jaw engagement | ⭐⭐⭐⭐ Combined signal |
+| **GHOST** | Back of tongue → soft palate ("G" slam) | High-frequency burst |
+| **LEFT** | Tongue tip → alveolar ridge ("L" touch) | Distinct onset |
+| **STOP** | Plosive "ST" + "P" = jaw engagement | Combined signal |
 | **REST** | Tongue flat, relaxed | Control (silence) |
 
 ### Tier 2: Control Word
@@ -220,15 +178,13 @@ Since electrodes are under the chin, we're tracking **tongue position**, not sou
 **"MAMA"** — Lips only (Orbicularis Oris). Tongue stays flat.
 - **Purpose:** If you subvocalize "MAMA" and see a chin signal spike, you're picking up **noise**, not muscle.
 
----
-
 ## The Motor Intensity Spectrum
 
 ### 5-Level "Descending Motor Intensity" Framework
 
-To validate the low-cost hardware, we employ a **Transfer Learning** strategy across the motor intensity spectrum.
+To validate the low-cost hardware, I employ a **Transfer Learning** strategy across the motor intensity spectrum.
 
-> **The Insight:** Training on "Open Mouth" movements (Mouthing) provides strong, high-amplitude signals that help the model learn the temporal dynamics of each word. We then transfer this knowledge to "Closed Mouth" (Silent Articulation) scenarios.
+> **The Insight:** Training on "Open Mouth" movements (Mouthing) provides strong, high-amplitude signals that help the model learn the temporal dynamics of each word. I then transfer this knowledge to "Closed Mouth" (Silent Articulation) scenarios.
 
 | Level | Terminology | Description | Signal | Role |
 |-------|-------------|-------------|--------|------|
@@ -240,7 +196,7 @@ To validate the low-cost hardware, we employ a **Transfer Learning** strategy ac
 
 ### Data Collection Summary
 
-Data was collected across all five motor intensity levels on December 19, 2025. Full session documentation: [2025-12-19_speech_spectrum_capture_session.md](../working_process/2025-12-19_speech_spectrum_capture_session.md)
+Data was collected across all five motor intensity levels on December 19, 2025.
 
 | Level | Cycles | Total Samples | Output File |
 |-------|--------|---------------|-------------|
@@ -267,9 +223,9 @@ SUBVOCAL:  GHOST=135,906 (25.3%) | REST=134,032 (24.9%) | STOP=133,993 (24.9%) |
 | SUBVOCAL | 1921.15 | 260.62 | 22 | 192921* | 192899 |
 | IMAGINED | 1921.28 | 9.55 | 1858 | 1987 | 129 |
 
-> **⚠️ Data Anomaly:** Subvocal data contained 1 outlier sample with value 192,921 (likely a sensor glitch). This was removed during preprocessing with a `RawValue < 4000` filter.
+> ** Data Anomaly:** Subvocal data contained 1 outlier sample with value 192,921 (likely a sensor glitch). This was removed during preprocessing with a `RawValue < 4000` filter.
 
-#### Critical Finding: Per-Class Statistics (Mouthing)
+#### Per-Class Statistics (Mouthing)
 
 | Class | Mean | Std | Range |
 |-------|------|-----|-------|
@@ -278,12 +234,12 @@ SUBVOCAL:  GHOST=135,906 (25.3%) | REST=134,032 (24.9%) | STOP=133,993 (24.9%) |
 | STOP | 1921.2 | 9.8 | [1854, 1991] |
 | REST | 1921.2 | 9.8 | [1856, 1989] |
 
-> **🔴 SMOKING GUN:** All four word classes have **identical** mean (1921.2) and standard deviation (9.7-9.8). This indicates that the single-channel signal contains **no discriminative information** for word-level classification. The signal can detect *that* muscle activation occurred, but cannot distinguish *which word* was articulated.
+> **SMOKING GUN:** All four word classes have **identical** mean (1921.2) and standard deviation (9.7-9.8). This indicates that the single-channel signal contains **no discriminative information** for word-level classification. The signal can detect *that* muscle activation occurred, but cannot distinguish *which word* was articulated.
 
 ### Transfer Learning Rationale
 **Open (Level 3) → Closed (Level 4)**
 
-We assume that the *temporal sequence* of muscle activation (e.g., G-H-O-S-T) remains consistent between open and closed mouth states, even if the *amplitude* changes.
+I assume that the *temporal sequence* of muscle activation (e.g., G-H-O-S-T) remains consistent between open and closed mouth states, even if the *amplitude* changes.
 - **Training (Level 3):** Learn the neuromuscular "signature" of the word with high Signal-to-Noise Ratio (SNR).
 - **Inference (Level 4):** Detect the same signature in the constrained, closed-mouth environment.
 

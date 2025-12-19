@@ -17,9 +17,6 @@ This section describes the classification task and train/test split methodology 
 | **Output** | Word class (GHOST, LEFT, STOP, REST) |
 | **Metric** | Accuracy, Precision, F1-Score |
 
-> **[INSERT IMAGE]** `images/viz_classification_task.png`
-> *Caption: Input/output diagram showing 3-second sEMG window mapped to word class prediction.*
-
 ### Transfer Learning Strategy
 
 The key insight of Phase 4 is **transfer learning from overt to covert speech**:
@@ -30,8 +27,7 @@ Level 3 (Mouthing)         → Train (High SNR, exaggerated movements)
 Level 4 (Silent Articulation) → Test (Low SNR, constrained movements)
 ```
 
-> **[INSERT IMAGE]** `images/viz_transfer_learning.png`
-> *Caption: Transfer learning paradigm showing high-amplitude source domain (L3) and low-amplitude target domain (L4).*
+> **Note:** Transfer learning from Mouthing to Silent Articulation is based on the assumption that the temporal sequence of muscle activation is consistent between Open and Closed states, even if the amplitude differs by an order of magnitude.
 
 ### Target Classes (4 Classes)
 
@@ -50,7 +46,7 @@ Level 4 (Silent Articulation) → Test (Low SNR, constrained movements)
 
 The core hypothesis is that models trained on **Mouthing (Open Articulation)** can generalize to **Silent Articulation (Closed Articulation)**.
 
-> **Why this matters:** We assume the *temporal sequence* of muscle activation is consistent between Open and Closed states, even if the *amplitude* differs by an order of magnitude.
+> **Why this matters:** I assume the *temporal sequence* of muscle activation is consistent between Open and Closed states, even if the *amplitude* differs by an order of magnitude.
 
 | Split | Source | Data | Rationale |
 |-------|--------|------|-----------|
@@ -58,8 +54,8 @@ The core hypothesis is that models trained on **Mouthing (Open Articulation)** c
 | **Validation** | Level 3: Mouthing (held out) | ~10% of L3 | Hyperparameter tuning on source domain |
 | **Test** | Level 4: Silent Articulation | ~50 cycles × 4 words | Low-amplitude, constrained signals (real-world scenario) |
 
-> **[INSERT IMAGE]** `images/viz_data_split.png`
-> *Caption: Visualization of train/validation/test split across motor intensity levels.*
+![ADC distribution](images/viz_adc_distribution.png)
+*Figure: ADC value distribution showing Mouthing vs Subvocal.*
 
 ### Single-Channel Considerations
 
@@ -67,9 +63,9 @@ Without dual-channel spatial features, the model relies on:
 
 | Feature Type | Importance | Notes |
 |--------------|------------|-------|
-| **Temporal patterns** | ⭐⭐⭐⭐⭐ | Primary discriminator (onset timing, duration) |
-| **Frequency features** | ⭐⭐⭐⭐ | ZCR critical (stable across amplitude changes) |
-| **Amplitude features** | ⭐⭐ | Less reliable for transfer (L3→L4 amplitude drop) |
+| **Temporal patterns** | ***** | Primary discriminator (onset timing, duration) |
+| **Frequency features** | **** | ZCR critical (stable across amplitude changes) |
+| **Amplitude features** | ** | Less reliable for transfer (L3→L4 amplitude drop) |
 
 ### Implementation in Code
 
@@ -119,12 +115,12 @@ def create_transfer_splits(data: dict) -> tuple:
 
 | Level | Target | Actual (L4 Test) | Status |
 |-------|--------|------------------|--------|
-| **Baseline** | >50% | 24.38% | ❌ Failed |
-| **Acceptable** | >65% | 24.38% | ❌ Failed |
-| **Target** | >80% | 24.38% | ❌ Failed |
-| **Binary (WORD vs REST)** | >50% | **72.64%** | ✅ Success |
+| **Baseline** | >50% | 24.38% | Failed |
+| **Acceptable** | >65% | 24.38% | Failed |
+| **Target** | >80% | 24.38% | Failed |
+| **Binary (WORD vs REST)** | >50% | 72.64% (mode collapse) | **Failed** |
 
-> ⚠️ **Critical Finding:** Multi-class classification failed to exceed chance level (25%). Only binary detection achieved meaningful accuracy.
+> **Critical Finding:** All classification failed. Multi-class at chance level (25%), binary collapsed to majority-class prediction (model predicts WORD for 100% of REST samples).
 
 ### Comparison to Phase 3 Results
 
@@ -132,7 +128,7 @@ def create_transfer_splits(data: dict) -> tuple:
 |--------|-------------------|-------------------|
 | Classes | 3 (RELAX, CLENCH, NOISE) | 4 (GHOST, LEFT, STOP, REST) |
 | Channels | 1 | 1 |
-| Best Model | Random Forest (74%) | Binary RF (72.64%) |
+| Best Model | Random Forest (74%) | None viable |
 | Multi-class Accuracy | 74% | 24% (failed) |
 | Target Signal | Flexor Digitorum (large) | Digastric (tiny) |
 | SNR | High | Very Low |
@@ -158,12 +154,9 @@ def create_transfer_splits(data: dict) -> tuple:
 8. Visualization   → Feature distributions, t-SNE embeddings
 ```
 
-> **[INSERT IMAGE]** `images/viz_analysis_pipeline.png`
-> *Caption: Complete analysis pipeline from raw data to model evaluation.*
-
 ## Safety Considerations
 
-Following Phase 3's findings, we prioritize:
+Following Phase 3's findings, I prioritize:
 
 | Constraint | Value | Rationale |
 |------------|-------|-----------|
@@ -175,7 +168,7 @@ The test set evaluation will focus on these deployment constraints.
 
 ## Exploratory Analysis: Multi-Level Validation
 
-Beyond the primary L3→L4 transfer, we collect L1, L2, L5 data for exploratory analysis:
+Beyond the primary L3→L4 transfer, I collect L1, L2, L5 data for exploratory analysis:
 
 | Level | Purpose |
 |-------|---------|
@@ -183,5 +176,3 @@ Beyond the primary L3→L4 transfer, we collect L1, L2, L5 data for exploratory 
 | L2 (Whisper) | Intermediate amplitude; validate fade curve |
 | L5 (Imagined) | Future work; pure mental representation |
 
-> **[INSERT IMAGE]** `images/viz_amplitude_fade.png`
-> *Caption: Expected amplitude progression from L1 (Overt) to L5 (Imagined), with ZCR remaining stable.*

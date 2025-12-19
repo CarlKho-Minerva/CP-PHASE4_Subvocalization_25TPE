@@ -10,10 +10,7 @@ Raw sEMG signals require preprocessing to remove noise and extract meaningful fe
 Raw ADC → Bandpass 1-45Hz → Notch 60Hz → Normalization → Epoch → Features
 ```
 
-> **[INSERT IMAGE]** `images/viz_signal_pipeline.png`
-> *Caption: Signal processing stages showing raw ADC, filtered, and normalized waveforms.*
-
-> **Note:** The AD8232's hardware bandpass filter (0.5-40Hz) already provides substantial filtering aligned with AlterEgo's target range (1.3-50Hz). Software filters are applied for consistency and to remove residual power line interference.
+> **Note:** Again, the AD8232's hardware bandpass filter (0.5-40Hz) already provides substantial filtering aligned with AlterEgo's target range (1.3-50Hz). Software filters are applied for consistency and to remove residual power line interference.
 
 ## Preprocessing Steps
 
@@ -275,30 +272,55 @@ def plot_feature_scatter(X_features: np.ndarray, y: np.ndarray, label_map: dict)
     plt.show()
 ```
 
-> **[INSERT IMAGE]** `images/eda_feature_scatter.png`
-> *Caption: 2D scatter plot showing MAV vs ZCR colored by word class. Clusters indicate feature separability.*
+## Actual Observations (from Colab)
 
-## Key Observations
+### Per-Class Statistics (Mouthing)
 
-### From Phase 3 (Forearm EMG)
-- **CLENCH** class forms distinct high-MAV, moderate-ZCR cluster
-- **NOISE** class spans wide variance (requires non-linear decision boundaries)
-- **Spectrograms** reveal frequency-specific textures useful for CNNs
+```
+GHOST: mean=1921.2, std=9.7, range=[1855, 1987]
+LEFT:  mean=1921.1, std=9.7, range=[1853, 1989]
+STOP:  mean=1921.2, std=9.8, range=[1854, 1991]
+REST:  mean=1921.2, std=9.8, range=[1856, 1989]
+```
 
-### Expected for Phase 4 (Silent Articulation)
+> **SMOKING GUN:** All four word classes have **identical** statistics. Mean, standard deviation, and range are indistinguishable between GHOST, LEFT, STOP, and REST.
 
-| Observation | Implication |
-|-------------|-------------|
-| **Lower amplitudes** | L4 signals ~10x smaller than L3; normalization critical |
-| **ZCR stability** | Zero-crossing rate remains consistent across intensity levels |
-| **Temporal patterns** | Word onset/offset timing is primary discriminator |
-| **Confounds** | Swallowing artifacts may contaminate REST class |
+### Signal Statistics Across Motor Intensity Levels
 
-### Single-Channel Mitigation Strategy
+| Level | Mean | Std | Range |
+|-------|------|-----|-------|
+| OVERT | 1921.37 | 12.31 | 1988 |
+| WHISPER | 1921.02 | 8.98 | 130 |
+| MOUTHING | 1921.18 | 9.75 | 138 |
+| SUBVOCAL | 1921.15 | 260.62* | 192899* |
+| IMAGINED | 1921.28 | 9.55 | 129 |
 
-Without spatial discrimination (chin vs jaw ratio), the model must rely on:
-1. **Temporal features** (~60% weight) — When activation occurs in the window
-2. **Frequency features** (~30% weight) — ZCR, spectral characteristics
-3. **Amplitude features** (~10% weight) — MAV, but less reliable
+*Subvocal contained 1 outlier (192,921) removed during preprocessing.
 
-> **Key Insight:** The ZCR feature becomes especially critical for single-channel operation, as it captures frequency content independent of amplitude—enabling transfer from high-amplitude L3 training to low-amplitude L4 testing.
+### Block Length Statistics
+
+| Level | Mean (samples) | Mean (seconds) | Total Blocks |
+|-------|----------------|----------------|--------------|
+| MOUTHING | 2,578 | 2.58s | 200 |
+| SUBVOCAL | 2,676 | 2.68s | 201 |
+
+### Why Preprocessing Couldn't Help
+
+| Feature Type | Phase 3 (Forearm) | Phase 4 (Subvocal) |
+|--------------|-------------------|-------------------|
+| Amplitude (MAV) | Distinct per class | **Identical** (1921.2) |
+| Frequency (ZCR) | Stable, discriminative | Identical between words |
+| Temporal (onset) | Clear patterns | No visible patterns |
+
+> **Conclusion:** Preprocessing and feature engineering cannot extract discriminative information that doesn't exist in the raw signal. The single-channel setup captures muscle activation but cannot distinguish between different tongue positions.
+
+### Visualization Evidence
+
+![Random samples mouthing](images/viz_random_samples_mouthing.png)
+*Random samples per class (Mouthing): All 4 word classes show visually indistinguishable waveforms.*
+
+![ADC distribution](images/viz_adc_distribution.png)
+*ADC distribution: Mouthing (broad) and Subvocal (narrow spike) both centered at 1921.*
+
+![Spectrograms](images/viz_spectrograms.png)
+*Mel-Spectrograms: All 4 classes show identical frequency content.*

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This section presents the out-of-sample prediction results for all evaluated models on single-channel subvocalization data. **All multi-class classifiers performed at or below chance level (25%)**, while binary classification achieved statistically significant accuracy (72.64%).
+This section presents the out-of-sample prediction results for all evaluated models on single-channel subvocalization data. **All classifiers failed** — multi-class performed at or below chance level (25%), and binary classification collapsed to majority-class prediction.
 
 ---
 
@@ -12,24 +12,22 @@ This section presents the out-of-sample prediction results for all evaluated mod
 
 | Model | Val Acc (L3) | Test Acc (L4) | Transfer Gap | vs. Chance |
 |-------|--------------|---------------|--------------|------------|
-| Random Forest (augmented) | 46.67% | **22.39%** | 24.28% | ❌ Worse |
-| MaxCRNN | 26.67% | **23.88%** | 2.79% | ❌ Worse |
-| Spectrogram CNN (MobileNetV2) | 30.00% | **24.38%** | 5.62% | ❌ Equal |
-| RF (no augmentation) | - | 23.38% | - | ❌ Worse |
-| Same-Domain (L3→L3) | - | 27.50% | - | ⚠️ Barely above |
+| Random Forest (augmented) | 46.67% | **22.39%** | 24.28% | Worse |
+| MaxCRNN | 26.67% | **23.88%** | 2.79% | Worse |
+| Spectrogram CNN (MobileNetV2) | 30.00% | **24.38%** | 5.62% | Equal |
+| RF (no augmentation) | - | 23.38% | - | Worse |
+| Same-Domain (L3→L3) | - | 27.50% | - | Barely above |
 
 **Chance Level:** 25% (4 classes)
 
-> ⚠️ **Critical Finding:** Even the same-domain sanity check (train on L3, test on L3) only achieved 27.50% accuracy—barely above chance. This confirms the signal lacks discriminative features, not a transfer learning failure.
+> **Critical Finding:** Even the same-domain sanity check (train on L3, test on L3) only achieved 27.50% accuracy—barely above chance. This confirms the signal lacks discriminative features, not a transfer learning failure.
 
-### Binary Classification (WORD vs REST)
+### Binary Classification (WORD vs REST): Also Failed
 
-| Model | Accuracy | Notes |
-|-------|----------|-------|
-| Random Forest | **72.64%** | ✅ Statistically significant |
+The binary classifier exhibited mode collapse — it predicted WORD for 100% of all inputs. The apparent accuracy simply reflects class imbalance (~73% WORD), not detection capability.
 
-![binary_confusion_matrix.png](../working_process/colab/phase4_all_results/binary_confusion_matrix.png)
-*Binary confusion matrix showing 97% recall on WORD class but 0% on REST (model predicts WORD for everything due to class imbalance).*
+![Binary confusion matrix](images/binary_confusion_matrix.png)
+*Binary confusion matrix: The model predicts WORD for everything, including 100% of REST samples.*
 
 ---
 
@@ -37,7 +35,7 @@ This section presents the out-of-sample prediction results for all evaluated mod
 
 ### Random Forest (L3→L4)
 
-![rf_confusion_matrix.png](../working_process/colab/phase4_all_results/rf_confusion_matrix.png)
+![RF confusion matrix](images/rf_confusion_matrix.png)
 
 **Classification Report:**
 
@@ -58,7 +56,7 @@ This section presents the out-of-sample prediction results for all evaluated mod
 
 ### MaxCRNN (L3→L4)
 
-![maxcrnn_confusion_matrix.png](../working_process/colab/phase4_all_results/maxcrnn_confusion_matrix.png)
+![MaxCRNN confusion matrix](images/maxcrnn_confusion_matrix.png)
 
 **Classification Report:**
 
@@ -76,7 +74,7 @@ This section presents the out-of-sample prediction results for all evaluated mod
 
 ### Spectrogram CNN (MobileNetV2)
 
-![spectrogram_cnn_confusion.png](../working_process/colab/phase4_all_results/spectrogram_cnn_confusion.png)
+![Spectrogram CNN confusion matrix](images/spectrogram_cnn_confusion.png)
 
 **Results:**
 - Val Accuracy (L3): 30.00%
@@ -89,9 +87,7 @@ This section presents the out-of-sample prediction results for all evaluated mod
 
 ### Same-Domain Sanity Check (L3→L3)
 
-![sanity_check_mouthing.png](../working_process/colab/phase4_all_results/sanity_check_mouthing.png)
-
-**The Smoking Gun:**
+![Sanity check mouthing](images/sanity_check_mouthing.png)
 
 | Class | Precision | Recall | F1-Score |
 |-------|-----------|--------|----------|
@@ -101,13 +97,13 @@ This section presents the out-of-sample prediction results for all evaluated mod
 | STOP | 0.25 | 0.20 | 0.22 |
 | **Accuracy** | | | **27.50%** |
 
-> **Interpretation:** If a model can't classify words when trained AND tested on the same high-SNR mouthing data, then the signal itself contains no discriminative information. This is not a transfer learning problem—it's a signal quality problem.
+If a model can't classify words when trained AND tested on the same high-SNR mouthing data, then the signal itself contains no discriminative information. This is not a transfer learning problem—it's a signal quality problem.
 
 ---
 
 ## Training Curves (MaxCRNN)
 
-![maxcrnn_training_curves.png](../working_process/colab/phase4_all_results/maxcrnn_training_curves.png)
+![MaxCRNN training curves](images/maxcrnn_training_curves.png)
 
 **Observations:**
 - **Loss:** Training loss stays flat (~1.4); validation loss increases from epoch 10, reaching >1.7
@@ -117,30 +113,27 @@ This section presents the out-of-sample prediction results for all evaluated mod
 ---
 
 ## Model Comparison
-
-![model_comparison.png](../working_process/colab/phase4_all_results/model_comparison.png)
-
 | Model | Test Acc (L4) | Train Time | Inference | Deployable |
 |-------|---------------|------------|-----------|------------|
-| Binary RF | **72.64%** | <1s | <1ms | ✅ Yes |
-| Random Forest | 22.39% | <1s | <1ms | ❌ Useless |
-| MaxCRNN | 23.88% | ~10min | ~50ms | ❌ Useless |
-| Spectrogram CNN | 24.38% | ~5min | ~100ms | ❌ Useless |
+| Binary RF | 72.64% (mode collapse) | <1s | <1ms | **No** |
+| Random Forest | 22.39% | <1s | <1ms | No |
+| MaxCRNN | 23.88% | ~10min | ~50ms | No |
+| Spectrogram CNN | 24.38% | ~5min | ~100ms | No |
 
 ---
 
 ## Final Strategy Comparison
 
-![final_comparison.png](../working_process/colab/phase4_all_results/final_comparison.png)
+![Final comparison](images/final_comparison.png)
 
 | Strategy | Goal | Result | Verdict |
 |----------|------|--------|---------|
-| Transfer Learning (L3→L4) | 4-class words | 22-24% | ❌ Failed |
-| Data Augmentation (3×) | Improve RF | -1% change | ❌ No effect |
-| Extended Features (14) | Richer signal | No improvement | ❌ No effect |
-| Window Overlap (50%) | More samples | No improvement | ❌ No effect |
-| Spectrogram + ImageNet | Visual patterns | 24.38% | ❌ Failed |
-| **Binary (WORD vs REST)** | Detection only | **72.64%** | ✅ **Success** |
+| Transfer Learning (L3→L4) | 4-class words | 22-24% | Failed |
+| Data Augmentation (3×) | Improve RF | -1% change | No effect |
+| Extended Features (14) | Richer signal | No improvement | No effect |
+| Window Overlap (50%) | More samples | No improvement | No effect |
+| Spectrogram + ImageNet | Visual patterns | 24.38% | Failed |
+| Binary (WORD vs REST) | Detection only | 72.64% (mode collapse) | **Failed** |
 
 ---
 
@@ -149,16 +142,16 @@ This section presents the out-of-sample prediction results for all evaluated mod
 ### What the Results Tell Us
 
 1. **Multi-class word discrimination is impossible** with single-channel data from a single electrode site
-2. **Mode collapse** occurred in all deep learning models (MaxCRNN → GHOST, SpecCNN → STOP)
-3. **Binary detection works** (72.64%)—the hardware can detect muscle activation, just not distinguish words
+2. **Mode collapse** occurred in all models — multi-class (MaxCRNN → GHOST, SpecCNN → STOP), binary (→ WORD)
+3. **Binary detection also failed** — the 72.64% accuracy is an artifact of class imbalance, not real discrimination
 
 ### Comparison to Phase 3
 
 | Metric | Phase 3 (Forearm) | Phase 4 (Subvocal) |
 |--------|-------------------|-------------------|
 | Task | 3-class (CLENCH, RELAX, NOISE) | 4-class (GHOST, LEFT, STOP, REST) |
-| Best Model | Random Forest (74%) | Binary RF (72.64%) |
-| Multi-class | ✅ Success | ❌ Failure |
+| Best Model | Random Forest (74%) | None viable |
+| Success | Yes | **No** |
 | Target Signal | Flexor Digitorum (large muscle) | Digastric (tiny muscle) |
 | SNR | High (visible bursts) | Very Low (buried in noise) |
 
@@ -166,15 +159,14 @@ This section presents the out-of-sample prediction results for all evaluated mod
 
 ## Deployment Recommendation
 
-**For ESP32 deployment:**
+**No deployment is viable.** The signal lacks discriminative information for any classification task.
 
-| Use Case | Model | Accuracy | Viability |
-|----------|-------|----------|-----------|
-| Word Classification | Any | ~24% | ❌ Not viable |
-| Binary Trigger | Random Forest | 72.64% | ✅ Viable |
-
-The only deployable product is a **binary "Silence Breaker" switch**, not a multi-word vocabulary interface.
+| Use Case | Accuracy | Viability |
+|----------|----------|-----------|
+| Word Classification | ~24% | Not viable |
+| Binary Detection | 72.64% (mode collapse) | Not viable |
 
 ---
 
 *"The classifier performs at chance level because there is nothing to classify."*
+

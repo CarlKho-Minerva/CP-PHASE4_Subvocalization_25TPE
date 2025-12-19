@@ -4,7 +4,7 @@
 
 **AlterEgo's Alter Ego**: Attempting to replicate MIT Media Lab's silent speech interface for **$30** instead of **$1,200+**.
 
-This project investigated the feasibility of word-level subvocalization classification using a single AD8232 cardiac sensor adapted for sEMG. Through rigorous experimentation across 6 machine learning strategies and 5 motor intensity levels, we discovered that **4-class word discrimination is not achievable with single-channel hardware**, but **binary activation detection (72.64%) is viable**—enabling a pivot to a "Biological Clicker" product.
+This project investigated the feasibility of word-level subvocalization classification using a single AD8232 cardiac sensor adapted for sEMG. Through rigorous experimentation across 6 machine learning strategies and 5 motor intensity levels, I discovered that **classification is not achievable with single-channel hardware**—multi-class (4 words) performed at chance level, and binary classification (WORD vs REST) collapsed to majority-class prediction.
 
 ---
 
@@ -14,20 +14,18 @@ This project investigated the feasibility of word-level subvocalization classifi
 
 | Strategy | Test Accuracy (L4) | vs. Chance (25%) |
 |----------|-------------------|------------------|
-| Random Forest (augmented) | 22.39% | ❌ Worse |
-| MaxCRNN (Inception+BiLSTM+Attention) | 23.88% | ❌ Worse |
-| Spectrogram CNN (MobileNetV2) | 24.38% | ❌ Equal |
-| Same-Domain Sanity Check (L3→L3) | 27.50% | ⚠️ Barely above |
+| Random Forest (augmented) | 22.39% | Worse |
+| MaxCRNN (Inception+BiLSTM+Attention) | 23.88% | Worse |
+| Spectrogram CNN (MobileNetV2) | 24.38% | Equal |
+| Same-Domain Sanity Check (L3→L3) | 27.50% | Barely above |
 
-### Binary Classification: Success
+### Binary Classification: Also Failed
 
-| Strategy | Accuracy | Interpretation |
-|----------|----------|----------------|
-| WORD vs REST | **72.64%** | ✅ Statistically significant |
+The binary (WORD vs REST) classifier exhibited mode collapse — it predicted WORD for **100% of all inputs**, achieving apparent 72.64% accuracy only because ~73% of the data was WORD class. This is not detection; it's a degenerate classifier.
 
 ---
 
-## Why Multi-Class Failed (The Smoking Gun)
+## Why Everything Failed (The Smoking Gun)
 
 ### Per-Class Signal Statistics (Mouthing Data)
 ```
@@ -41,64 +39,25 @@ REST:  mean=1921.2, std=9.8
 
 ### Root Cause Analysis
 
-1. **Hardware Limitation:** AlterEgo uses 7 electrodes across 5 sites; we had 1 electrode at 1 site
+1. **Hardware Limitation:** AlterEgo uses 7 electrodes across 5 sites; I had 1 electrode at 1 site
 2. **Spatial Resolution Lost:** Without jaw-vs-chin differential, GHOST (tongue back) ≈ LEFT (tongue tip) electrically
 3. **SNR Problem:** Subvocal signals are 10-100× smaller than mouthing; buried in AD8232 noise floor
-4. **Mode Collapse:** MaxCRNN predicted GHOST for 92-94% of all inputs; SpecCNN predicted STOP for ~80%
-
----
-
-## What Actually Works
-
-```
-┌─────────────────────────────────────────┐
-│     THE $30 BIOLOGICAL CLICKER          │
-├─────────────────────────────────────────┤
-│  Input:  Subvocalize any word           │
-│  Output: Binary trigger (On/Off)        │
-│  Use:    Hands-free mouse click         │
-│  Accuracy: 72.64%                       │
-└─────────────────────────────────────────┘
-```
-
-The hardware **works as a detector, just not as a discriminator**. It can reliably detect *when* someone is trying to speak, even silently—it just cannot determine *what* they're saying.
-
----
-
-## Methodology Pipeline
-
-```mermaid
-graph TD
-    A[5-Level Motor Spectrum] --> B[Signal Capture]
-    B --> C[Preprocessing]
-    C --> D[Window Extraction]
-    D --> E{Classification}
-
-    E --> F[Random Forest]
-    E --> G[MaxCRNN]
-    E --> H[Spectrogram CNN]
-    E --> I[Binary RF]
-
-    F --> J[22.39% ❌]
-    G --> K[23.88% ❌]
-    H --> L[24.38% ❌]
-    I --> M[72.64% ✅]
-```
+4. **Mode Collapse:** All models collapsed to predicting dominant class (MaxCRNN → GHOST, SpecCNN → STOP, Binary → WORD)
 
 ---
 
 ## Due Diligence Summary
 
-### What We Tried
+### What I Tried
 
 | Approach | Rationale | Result |
 |----------|-----------|--------|
-| Transfer Learning (L3→L4) | Train on high-SNR mouthing, test on subvocal | Failed—signal itself lacks features |
+| Transfer Learning (L3→L4) | Train on high-SNR mouthing, test on subvocal | Failed. The signal itself lacks features |
 | Data Augmentation (3×) | Increase training diversity | No improvement (-1%) |
 | Extended Features (14 features) | Add spectral, RMS, onset indicators | No improvement |
 | Spectrogram + ImageNet | Visual pattern recognition | Mode collapse to single class |
 | Window Overlap (50%) | More training samples | No improvement |
-| Binary Simplification | Reduce to WORD vs REST | **Success (72.64%)** |
+| Binary Simplification | Reduce to WORD vs REST | **Failed** — mode collapse to WORD |
 
 ### Data Collection Rigor
 
@@ -116,34 +75,40 @@ graph TD
 | Target | Grip clench | Silent words |
 | Classes | 3 (CLENCH, RELAX, NOISE) | 4 (GHOST, LEFT, STOP, REST) |
 | Channels | 1 | 1 |
-| Best Accuracy | **74.25%** | 24.38% (4-class), **72.64%** (binary) |
-| Deployable | Yes (Random Forest) | Yes (Binary only) |
+| Best Accuracy | **74.25%** | 24.38% (chance level) |
+| Deployable | Yes (Random Forest) | **No** |
+
+**Why the difference?** The forearm flexor digitorum is a large muscle with high-amplitude signals easily captured by a single electrode. The submental muscles are tiny, produce microvolt signals, and require spatial discrimination between multiple sites to distinguish tongue positions.
 
 ---
 
 ## Conclusions
 
-### What We Proved
-1. The AD8232 **can** detect muscle activation in the submental region
-2. Binary detection (Speech vs. Silence) achieves **72.64%** accuracy
-3. Rigorous experimental methodology can reveal hardware limitations before wasted effort
+### What I Proved
+1. Single-channel AD8232 **can** detect presence of muscle activation in submental region
+2. Rigorous experimental methodology revealed hardware limitations before more wasted effort
+3. The same-domain sanity check (27.50%) confirmed the failure is in the signal, not the transfer
 
-### What We Disproved
+### What I Disproved
 1. Single-channel EMG **cannot** discriminate between phonetically distinct words
 2. Transfer learning L3→L4 **does not** generalize—the source domain lacks discriminative features
 3. Deep learning **cannot** extract features that don't exist in the signal
+4. Binary classification **cannot** be salvaged—mode collapse shows no real WORD vs REST discrimination
 
-### The Pivot
-We are not building a "Telepathy Helmet." We are building a **"Biological Clicker"**—a hands-free binary switch controlled by chin muscle activation. It's less "Minority Report" and more "Stephen Hawking's cheek sensor," but it works, and it fits the $30 budget.
+### The Reality
+This is a **negative result**. The $30 hardware cannot replicate AlterEgo's functionality—not even as a simplified binary trigger. Genuine subvocalization detection requires:
+- Multiple electrode sites (jaw + chin minimum)
+- Higher-quality instrumentation amplifiers
+- Spatial feature extraction
 
 ---
 
 ## Next Steps
 
-1. **Optimize Binary Classifier:** Fine-tune Random Forest for 72.64% → 80%+ with temporal smoothing
-2. **Deploy to ESP32:** Implement as real-time "Silence Breaker" trigger
-3. **Hardware Upgrade Path:** Second AD8232 for jaw-vs-chin differential (spatial features)
+1. **Hardware Upgrade:** Second AD8232 for jaw-vs-chin differential (spatial features)
+2. **Alternative Approach:** Test different electrode placements (masseter, temporalis)
+3. **Document Learnings:** This negative result is valuable—publish to prevent others from repeating
 
 ---
 
-*"The problem is not your code. The problem is your signal. But the signal is good enough for a clicker."*
+*"The problem is not your code. The problem is your signal. And the signal is not good enough for anything."*

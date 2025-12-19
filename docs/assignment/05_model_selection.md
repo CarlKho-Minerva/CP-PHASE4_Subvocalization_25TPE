@@ -8,7 +8,7 @@ This section discusses model selection for **Silent Articulation classification*
 
 ### The "Ladder of Abstraction"
 
-Following Phase 3's methodology, we evaluate models across increasing complexity:
+Following Phase 3's methodology, I evaluate models across increasing complexity:
 
 | Tier | Models | Feature Set | Compute |
 |------|--------|-------------|---------|
@@ -17,9 +17,6 @@ Following Phase 3's methodology, we evaluate models across increasing complexity
 | **Deep Learning** | 1D CNN, CRNN | Raw sequence | O(N²) |
 | **Transfer Learning** | MobileNetV2, ResNet50 | Spectrograms | O(N³) |
 | **Custom** | **MaxCRNN** | Raw + Attention | O(N² log N) |
-
-> **[INSERT IMAGE]** `images/viz_model_ladder.png`
-> *Caption: Model complexity ladder from simple heuristics to custom deep learning architectures.*
 
 ### Single-Channel Adaptations
 
@@ -32,7 +29,7 @@ With single-channel input (3000×1 instead of 1000×2), model architectures are 
 | LSTM units | 128 | 64 (reduced) |
 | Total parameters | ~1.2M | ~400K |
 
-## Novel Technique: MaxCRNN Architecture
+## The MaxCRNN Architecture
 
 ### High-Level Architecture
 
@@ -40,8 +37,8 @@ With single-channel input (3000×1 instead of 1000×2), model architectures are 
 Input (3000×1) → Inception Blocks → Bi-LSTM → Multi-Head Attention → Softmax
 ```
 
-> **[INSERT IMAGE]** `images/viz_maxcrnn_architecture.png`
-> *Caption: MaxCRNN architecture diagram showing Inception blocks, Bi-LSTM, and attention layers.*
+![Final comparison](images/final_comparison.png)
+*Figure: Final strategy comparison showing all approaches tested.*
 
 ### Mathematical Foundations
 
@@ -60,9 +57,6 @@ $$
 $$
 
 **Intuition:** Different kernel sizes capture temporal patterns at different scales—individual motor pulses (small kernels) vs. sustained tongue movements (large kernels).
-
-> **[INSERT IMAGE]** `images/viz_inception_block.png`
-> *Caption: Inception block showing parallel 1×1, 3×3, 5×5 convolutions and max pooling branch.*
 
 #### 2. Bidirectional LSTM (Temporal Modeling)
 
@@ -123,9 +117,6 @@ $$
 
 **Intuition:** Attention allows the model to focus on the most discriminative time points (e.g., the onset of tongue movement) rather than treating all timesteps equally.
 
-> **[INSERT IMAGE]** `images/viz_attention_weights.png`
-> *Caption: Visualization of attention weights showing focus on word onset and offset regions.*
-
 ### Complete MaxCRNN Pseudocode
 
 ```
@@ -141,59 +132,6 @@ Output: ŷ ∈ ℝ^K        // Class probabilities
 5. h_pool ← GlobalAveragePool(h_attn)
 6. ŷ ← Softmax(Dense(h_pool))
 ─────────────────────────────────────────────────
-```
-
-## Model Initialization Code
-
-```python
-import tensorflow as tf
-from tensorflow.keras import layers, Model
-
-def build_maxcrnn(input_shape: tuple = (3000, 1),
-                  n_classes: int = 4) -> Model:
-    """
-    Build the MaxCRNN architecture for single-channel sEMG.
-
-    Architecture: Inception → Bi-LSTM → Multi-Head Attention
-    """
-    inputs = layers.Input(shape=input_shape)
-
-    # Inception Block 1
-    x = inception_block(inputs, filters=32)
-    x = layers.BatchNormalization()(x)
-    x = layers.Dropout(0.3)(x)
-
-    # Inception Block 2
-    x = inception_block(x, filters=64)
-    x = layers.BatchNormalization()(x)
-    x = layers.Dropout(0.3)(x)
-
-    # Bi-LSTM (reduced units for single-channel)
-    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True))(x)
-
-    # Multi-Head Attention
-    x = layers.MultiHeadAttention(num_heads=4, key_dim=16)(x, x)
-
-    # Classification Head
-    x = layers.GlobalAveragePooling1D()(x)
-    x = layers.Dense(32, activation='relu')(x)
-    x = layers.Dropout(0.5)(x)
-    outputs = layers.Dense(n_classes, activation='softmax')(x)
-
-    return Model(inputs, outputs, name='MaxCRNN_SingleChannel')
-
-
-def inception_block(x, filters: int):
-    """
-    1D Inception block with parallel convolutions.
-    """
-    conv1 = layers.Conv1D(filters, 1, padding='same', activation='relu')(x)
-    conv3 = layers.Conv1D(filters, 3, padding='same', activation='relu')(x)
-    conv5 = layers.Conv1D(filters, 5, padding='same', activation='relu')(x)
-    pool = layers.MaxPooling1D(3, strides=1, padding='same')(x)
-    pool = layers.Conv1D(filters, 1, padding='same', activation='relu')(pool)
-
-    return layers.Concatenate()([conv1, conv3, conv5, pool])
 ```
 
 ## Baseline Comparison: Random Forest
@@ -218,14 +156,14 @@ rf_model = RandomForestClassifier(
 
 ### Phase 4 Actual Results
 
-> ⚠️ **Critical Finding:** All multi-class models performed at or below chance level (25%). Only binary classification succeeded.
+> **Critical Finding:** All models failed. Multi-class at or below chance level (25%), binary classification collapsed to majority-class prediction.
 
 | Model | Val Acc (L3) | Test Acc (L4) | Transfer Gap | Deployable? |
 |-------|--------------|---------------|--------------|-------------|
-| Random Forest (aug) | 46.67% | 22.39% | 24.28% | ❌ Useless |
-| MaxCRNN | 26.67% | 23.88% | 2.79% | ❌ Useless |
-| Spectrogram CNN | 30.00% | 24.38% | 5.62% | ❌ Useless |
-| **Binary RF** | - | **72.64%** | - | ✅ Yes |
+| Random Forest (aug) | 46.67% | 22.39% | 24.28% | Useless |
+| MaxCRNN | 26.67% | 23.88% | 2.79% | Useless |
+| Spectrogram CNN | 30.00% | 24.38% | 5.62% | Useless |
+| **Binary RF** | - | 72.64% (mode collapse) | - | **No** |
 
 ### Why Models Failed: Mode Collapse
 
@@ -233,7 +171,7 @@ rf_model = RandomForestClassifier(
 |-------|--------------|-------------|
 | MaxCRNN | Predicted GHOST 92-94% | Collapsed to majority class |
 | Spectrogram CNN | Predicted STOP 78-84% | Collapsed to single class |
-| Random Forest | Near-uniform confusion | No features to learn |
+| Binary RF | Predicted WORD 100% for REST | Collapsed to majority class |
 
 ### The Smoking Gun: Same-Domain Sanity Check
 
@@ -245,10 +183,10 @@ Even when trained AND tested on mouthing data (L3→L3), accuracy was only **27.
 
 | Use Case | Recommended Model | Rationale |
 |----------|-------------------|-----------|
-| **Binary Detection** | Random Forest | 72.64% accuracy, <1ms latency |
+| **Binary Detection** | None | 72.64% is mode collapse (100% of REST → WORD) |
 | **Word Classification** | None | Signal lacks discriminative info |
 
-> **Conclusion:** For single-channel submental EMG, the only viable product is a **binary "Silence Breaker" switch**, not a multi-word vocabulary interface.
+> **Conclusion:** For single-channel submental EMG, **no classification is viable**. All models collapsed to predicting a single class.
 
 ## References
 
