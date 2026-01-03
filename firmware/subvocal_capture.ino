@@ -5,7 +5,7 @@
 // PIN CONFIGURATION
 // ============================================
 #define AD8232_CH1    34    // Chin (Digastric) - Primary
-#define AD8232_CH2    35    // Jaw (Masseter) - Secondary
+#define AD8232_CH2    36    // Jaw (Masseter) - Secondary (VP pin)
 #define SDN_PIN       25    // Shutdown pin - wire to 3.3V or set HIGH
 
 #define SAMPLE_RATE   1000  // Hz
@@ -77,7 +77,7 @@ ESP32           AD8232 (Channel 2 - Jaw)
 ------          ------------------------
 3.3V    ────────  3.3V  (shared with CH1)
 GND     ────────  GND   (shared with CH1)
-GPIO 35 ────────  OUTPUT
+GPIO 36 ────────  OUTPUT
 
 ELECTRODE PLACEMENT:
 - CH1: Under chin (Red+Yellow 2cm apart), Green on mastoid
