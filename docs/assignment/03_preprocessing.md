@@ -206,9 +206,6 @@ def plot_class_distribution(y: np.ndarray, label_map: dict):
     plt.show()
 ```
 
-> **[INSERT IMAGE]** `images/eda_class_distribution.png`
-> *Caption: Bar chart showing number of windows per word class (GHOST, LEFT, REST, STOP).*
-
 ```python
 ```
 
@@ -236,9 +233,6 @@ def plot_motor_intensity_comparison(data: dict):
     plt.savefig('eda_motor_intensity_comparison.png', dpi=150)
     plt.show()
 ```
-
-> **[INSERT IMAGE]** `images/eda_motor_intensity_comparison.png`
-> *Caption: Side-by-side comparison of signal amplitudes across all five motor intensity levels (L1-L5).*
 
 ### Descriptive Statistics
 

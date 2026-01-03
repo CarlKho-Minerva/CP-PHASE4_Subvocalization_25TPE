@@ -2,7 +2,7 @@
 ## Phase 4: Subvocalization Detection with Low-Cost Hardware
 
 **Student:** Carl Vincent Kho
-**Generated:** 2025-12-20 02:51:43
+**Generated:** 2025-12-20 02:54:56
 **Course:** CS156 - Machine Learning Pipeline
 
 ---
@@ -770,9 +770,6 @@ def plot_class_distribution(y: np.ndarray, label_map: dict):
     plt.show()
 ```
 
-> **[INSERT IMAGE]** `images/eda_class_distribution.png`
-> *Caption: Bar chart showing number of windows per word class (GHOST, LEFT, REST, STOP).*
-
 ```python
 ```
 
@@ -800,9 +797,6 @@ def plot_motor_intensity_comparison(data: dict):
     plt.savefig('eda_motor_intensity_comparison.png', dpi=150)
     plt.show()
 ```
-
-> **[INSERT IMAGE]** `images/eda_motor_intensity_comparison.png`
-> *Caption: Side-by-side comparison of signal amplitudes across all five motor intensity levels (L1-L5).*
 
 ### Descriptive Statistics
 
@@ -1005,9 +999,6 @@ def create_transfer_splits(data: dict) -> tuple:
 | **F1-Score (Macro)** | Balanced metric for class imbalance | Secondary |
 | **Confusion Matrix** | Visualize specific misclassifications | Diagnostic |
 | **Inference Latency** | Must be <5ms per window for real-time ESP32 | Deployment |
-
-> **[INSERT IMAGE]** `images/viz_confusion_matrix_template.png`
-> *Caption: Expected confusion matrix structure showing per-class precision and recall.*
 
 ### Success Criteria vs. Actual Results
 

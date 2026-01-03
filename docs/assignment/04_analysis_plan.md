@@ -108,9 +108,6 @@ def create_transfer_splits(data: dict) -> tuple:
 | **Confusion Matrix** | Visualize specific misclassifications | Diagnostic |
 | **Inference Latency** | Must be <5ms per window for real-time ESP32 | Deployment |
 
-> **[INSERT IMAGE]** `images/viz_confusion_matrix_template.png`
-> *Caption: Expected confusion matrix structure showing per-class precision and recall.*
-
 ### Success Criteria vs. Actual Results
 
 | Level | Target | Actual (L4 Test) | Status |
